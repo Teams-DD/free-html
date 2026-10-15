@@ -503,12 +503,12 @@ export const VconApp: React.FC = () => {
               </span>
               <button
                 onClick={() => setPreviewTemplate(null)}
-                className="w-6 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
+                className="w-6 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 transition cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
-            <div className="flex-1 bg-white relative">
+            <div className="flex-1 bg-zinc-950 relative border-t border-zinc-850">
               <iframe
                 title="Preview"
                 srcDoc={previewTemplate.html_content}
@@ -521,7 +521,7 @@ export const VconApp: React.FC = () => {
 
       {/* Toast */}
       {toastMessage && (
-        <div className="fixed bottom-3 right-3 bg-zinc-900 border border-zinc-700 text-zinc-100 text-[11px] px-3 py-1.5 rounded shadow-xl z-50 font-medium">
+        <div className="fixed bottom-3 right-3 bg-zinc-900 border border-zinc-800 text-zinc-300 text-[11px] px-3 py-1.5 rounded shadow-xl z-50 font-medium">
           {toastMessage}
         </div>
       )}

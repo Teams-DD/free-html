@@ -244,7 +244,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
                 type="button"
                 onClick={() => setMode('single')}
                 className={`px-2 py-0.5 rounded transition cursor-pointer ${
-                  mode === 'single' ? 'bg-zinc-800 text-white font-medium' : 'text-zinc-400 hover:text-zinc-200'
+                  mode === 'single' ? 'bg-zinc-850 text-zinc-200 border border-zinc-750/50 font-medium' : 'text-zinc-400 hover:text-zinc-300'
                 }`}
               >
                 Single Editor
@@ -253,7 +253,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
                 type="button"
                 onClick={() => setMode('bulk')}
                 className={`px-2 py-0.5 rounded transition cursor-pointer ${
-                  mode === 'bulk' ? 'bg-zinc-800 text-white font-medium' : 'text-zinc-400 hover:text-zinc-200'
+                  mode === 'bulk' ? 'bg-zinc-850 text-zinc-200 border border-zinc-750/50 font-medium' : 'text-zinc-400 hover:text-zinc-300'
                 }`}
               >
                 Multiple Files Upload
@@ -283,7 +283,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
             <button
               onClick={handleSubmit}
               disabled={saving}
-              className="px-3 py-1 bg-zinc-800 hover:bg-zinc-750 text-white border border-zinc-700/60 rounded text-[11px] font-medium transition flex items-center space-x-1 cursor-pointer disabled:opacity-50"
+              className="px-3 py-1 bg-zinc-800/80 hover:bg-zinc-800 text-zinc-200 border border-zinc-750/60 rounded text-[11px] font-medium transition flex items-center space-x-1 cursor-pointer disabled:opacity-50"
             >
               <Save className="w-3 h-3" />
               <span>{saving ? 'Saving...' : 'Save Template'}</span>
@@ -311,7 +311,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
             <button
               onClick={handleBulkUploadSubmit}
               disabled={bulkUploading || bulkQueue.length === 0}
-              className="px-3 py-1 bg-zinc-800 hover:bg-zinc-750 text-white border border-zinc-700/60 rounded text-[11px] font-medium transition flex items-center space-x-1 cursor-pointer disabled:opacity-50"
+              className="px-3 py-1 bg-zinc-800/80 hover:bg-zinc-800 text-zinc-200 border border-zinc-750/60 rounded text-[11px] font-medium transition flex items-center space-x-1 cursor-pointer disabled:opacity-50"
             >
               <Save className="w-3 h-3" />
               <span>{bulkUploading ? 'Uploading...' : `Upload All (${bulkQueue.length})`}</span>
@@ -487,7 +487,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
                 type="button"
                 onClick={() => setActiveTab('editor')}
                 className={`px-2 py-0.5 rounded text-[10px] transition cursor-pointer ${
-                  activeTab === 'editor' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200'
+                  activeTab === 'editor' ? 'bg-zinc-850 text-zinc-200 border border-zinc-750/50' : 'text-zinc-400 hover:text-zinc-300'
                 }`}
               >
                 Code Only
@@ -496,7 +496,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
                 type="button"
                 onClick={() => setActiveTab('split')}
                 className={`px-2 py-0.5 rounded text-[10px] transition cursor-pointer ${
-                  activeTab === 'split' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200'
+                  activeTab === 'split' ? 'bg-zinc-850 text-zinc-200 border border-zinc-750/50' : 'text-zinc-400 hover:text-zinc-300'
                 }`}
               >
                 Split View
@@ -505,7 +505,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
                 type="button"
                 onClick={() => setActiveTab('preview')}
                 className={`px-2 py-0.5 rounded text-[10px] transition cursor-pointer ${
-                  activeTab === 'preview' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200'
+                  activeTab === 'preview' ? 'bg-zinc-850 text-zinc-200 border border-zinc-750/50' : 'text-zinc-400 hover:text-zinc-300'
                 }`}
               >
                 Preview Only
@@ -524,19 +524,19 @@ export const TemplateCreateEdit: React.FC<Props> = ({
                 <textarea
                   value={htmlContent}
                   onChange={(e) => setHtmlContent(e.target.value)}
-                  className="w-full h-full p-3 bg-zinc-950 text-zinc-200 font-mono text-[11px] leading-relaxed resize-none focus:outline-none selection:bg-zinc-800"
+                  className="w-full h-full p-3 bg-zinc-950 text-zinc-300 font-mono text-[11px] leading-relaxed resize-none focus:outline-none selection:bg-zinc-800"
                   spellCheck={false}
                 />
               </div>
             )}
 
             {(activeTab === 'preview' || activeTab === 'split') && (
-              <div className="flex-1 flex flex-col bg-zinc-900 min-w-0 overflow-hidden">
+              <div className="flex-1 flex flex-col bg-zinc-950 min-w-0 overflow-hidden">
                 <iframe
                   title="Live Preview"
                   srcDoc={htmlContent}
                   sandbox="allow-scripts allow-modals"
-                  className="w-full h-full border-0 bg-white"
+                  className="w-full h-full border-0 bg-zinc-950"
                 />
               </div>
             )}

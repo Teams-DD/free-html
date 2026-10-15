@@ -102,7 +102,7 @@ export const CategoryManager: React.FC<Props> = ({
       <div className="p-3 border-b border-zinc-800 flex items-center justify-between gap-3 shrink-0">
         <div className="flex items-center space-x-2">
           <FolderTree className="w-4 h-4 text-zinc-400" />
-          <h2 className="font-semibold text-zinc-100 uppercase text-xs tracking-tight">
+          <h2 className="font-semibold text-zinc-200 uppercase text-xs tracking-tight">
             Categories ({categories.length})
           </h2>
         </div>
@@ -130,7 +130,7 @@ export const CategoryManager: React.FC<Props> = ({
 
           <button
             onClick={openAddModal}
-            className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-750 text-zinc-100 border border-zinc-700/60 rounded text-xs font-medium transition flex items-center space-x-1 cursor-pointer"
+            className="px-2.5 py-1 bg-zinc-800/80 hover:bg-zinc-800 text-zinc-200 border border-zinc-750/60 rounded text-xs font-medium transition flex items-center space-x-1 cursor-pointer"
           >
             <Plus className="w-3 h-3" />
             <span>Add Category</span>
@@ -295,7 +295,7 @@ export const CategoryManager: React.FC<Props> = ({
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-3 py-1 bg-zinc-800 hover:bg-zinc-750 text-zinc-100 border border-zinc-700/60 rounded text-xs font-medium transition flex items-center space-x-1 cursor-pointer disabled:opacity-50"
+                  className="px-3 py-1 bg-zinc-800/80 hover:bg-zinc-800 text-zinc-200 border border-zinc-750/60 rounded text-xs font-medium transition flex items-center space-x-1 cursor-pointer disabled:opacity-50"
                 >
                   <Save className="w-3 h-3" />
                   <span>{submitting ? 'Saving...' : 'Save Category'}</span>

@@ -42,7 +42,7 @@ ADMIN_SECRET=secure_random_admin_session_secret`;
       <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
         <div className="flex items-center space-x-2">
           <FileCode2 className="w-4 h-4 text-zinc-400" />
-          <h2 className="font-semibold text-zinc-100 uppercase text-xs tracking-tight">
+          <h2 className="font-semibold text-zinc-200 uppercase text-xs tracking-tight">
             Cloudflare Pages & Functions Deployment Ready
           </h2>
         </div>
@@ -133,7 +133,7 @@ ADMIN_SECRET=secure_random_admin_session_secret`;
               <span className="text-[10px] text-zinc-400 font-mono">1. Local Edge Emulation:</span>
               <button
                 onClick={() => copyText('npm run pages:dev', 'cmd1')}
-                className="text-[10px] text-zinc-400 hover:text-white flex items-center space-x-1"
+                className="text-[10px] text-zinc-400 hover:text-zinc-200 flex items-center space-x-1"
               >
                 {copiedKey === 'cmd1' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                 <span>{copiedKey === 'cmd1' ? 'Copied' : 'Copy'}</span>
@@ -149,7 +149,7 @@ ADMIN_SECRET=secure_random_admin_session_secret`;
               <span className="text-[10px] text-zinc-400 font-mono">2. Direct Deploy to Cloudflare Pages:</span>
               <button
                 onClick={() => copyText('npm run pages:deploy', 'cmd2')}
-                className="text-[10px] text-zinc-400 hover:text-white flex items-center space-x-1"
+                className="text-[10px] text-zinc-400 hover:text-zinc-200 flex items-center space-x-1"
               >
                 {copiedKey === 'cmd2' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                 <span>{copiedKey === 'cmd2' ? 'Copied' : 'Copy'}</span>
@@ -170,7 +170,7 @@ ADMIN_SECRET=secure_random_admin_session_secret`;
           </span>
           <button
             onClick={() => copyText(envVars, 'env')}
-            className="text-[10px] text-zinc-400 hover:text-white flex items-center space-x-1"
+            className="text-[10px] text-zinc-400 hover:text-zinc-200 flex items-center space-x-1"
           >
             {copiedKey === 'env' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
             <span>{copiedKey === 'env' ? 'Copied' : 'Copy All'}</span>

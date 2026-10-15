@@ -107,7 +107,7 @@ export const TursoManager: React.FC<Props> = ({
       <div className="flex items-center justify-between pb-2.5 border-b border-zinc-800">
         <div className="flex items-center space-x-2">
           <Database className="w-4 h-4 text-zinc-400" />
-          <h2 className="font-semibold text-zinc-100 uppercase text-xs tracking-tight">
+          <h2 className="font-semibold text-zinc-200 uppercase text-xs tracking-tight">
             Turso SQLite Database
           </h2>
         </div>
@@ -123,7 +123,7 @@ export const TursoManager: React.FC<Props> = ({
             href="https://turso.tech"
             target="_blank"
             rel="noreferrer"
-            className="px-2 py-0.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 rounded text-[10px] font-medium flex items-center space-x-1"
+            className="px-2 py-0.5 bg-zinc-850 hover:bg-zinc-800 text-zinc-300 rounded text-[10px] font-medium flex items-center space-x-1 border border-zinc-750/40"
           >
             <span>turso.tech</span>
             <ExternalLink className="w-2.5 h-2.5" />
@@ -158,7 +158,7 @@ export const TursoManager: React.FC<Props> = ({
           <button
             onClick={handleTest}
             disabled={actionLoading}
-            className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-750 text-zinc-200 border border-zinc-700/60 rounded text-[11px] font-medium transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+            className="px-2.5 py-1 bg-zinc-800/80 hover:bg-zinc-800 text-zinc-200 border border-zinc-750/60 rounded text-[11px] font-medium transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
           >
             <Play className="w-2.5 h-2.5" />
             <span>Test Connection</span>
@@ -167,7 +167,7 @@ export const TursoManager: React.FC<Props> = ({
           <button
             onClick={handleInit}
             disabled={actionLoading}
-            className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-750 text-zinc-200 border border-zinc-700/60 rounded text-[11px] font-medium transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+            className="px-2.5 py-1 bg-zinc-800/80 hover:bg-zinc-800 text-zinc-200 border border-zinc-750/60 rounded text-[11px] font-medium transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
           >
             <Database className="w-2.5 h-2.5" />
             <span>Verify Schema</span>
@@ -176,7 +176,7 @@ export const TursoManager: React.FC<Props> = ({
           <button
             onClick={handleSeed}
             disabled={actionLoading}
-            className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700/60 rounded text-[11px] font-medium transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+            className="px-2.5 py-1 bg-zinc-800/80 hover:bg-zinc-800 text-zinc-200 border border-zinc-750/60 rounded text-[11px] font-medium transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
           >
             <span>Seed Initial Templates</span>
           </button>

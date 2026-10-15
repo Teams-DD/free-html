@@ -30,28 +30,28 @@ export const VconSidebar: React.FC<Props> = ({
   r2Connected,
 }) => {
   return (
-    <aside className="w-52 bg-zinc-950 border-r border-zinc-800/80 flex flex-col shrink-0 text-xs">
+    <aside className="w-52 bg-zinc-950 flex flex-col shrink-0 text-xs">
       {/* Admin Branding */}
-      <div className="h-10 px-3 flex items-center justify-between border-b border-zinc-800/80">
+      <div className="h-10 px-3.5 flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          <div className="w-5 h-5 bg-zinc-800 border border-zinc-700/60 rounded flex items-center justify-center text-zinc-200 font-bold text-[10px]">
+          <div className="w-5 h-5 bg-zinc-850 rounded flex items-center justify-center text-zinc-400 font-semibold text-[10px]">
             V
           </div>
-          <span className="font-semibold tracking-tight text-zinc-200 uppercase text-[11px]">
+          <span className="font-medium tracking-tight text-zinc-300 uppercase text-[11px]">
             VCON ADMIN
           </span>
         </div>
-        <ShieldCheck className="w-3 h-3 text-emerald-500" />
+        <ShieldCheck className="w-3.5 h-3.5 text-emerald-500/80" />
       </div>
 
       {/* Navigation Links */}
       <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
         <button
           onClick={() => onSelectTab('templates')}
-          className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-[11px] font-medium transition cursor-pointer ${
+          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded text-[11px] font-medium transition cursor-pointer ${
             activeTab === 'templates'
-              ? 'bg-zinc-800 text-white'
-              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+              ? 'bg-zinc-850 text-zinc-200'
+              : 'text-zinc-400 hover:text-zinc-300 hover:bg-zinc-900/60'
           }`}
         >
           <div className="flex items-center space-x-2">
@@ -62,10 +62,10 @@ export const VconSidebar: React.FC<Props> = ({
 
         <button
           onClick={() => onSelectTab('categories')}
-          className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-[11px] font-medium transition cursor-pointer ${
+          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded text-[11px] font-medium transition cursor-pointer ${
             activeTab === 'categories'
-              ? 'bg-zinc-800 text-white'
-              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+              ? 'bg-zinc-850 text-zinc-200'
+              : 'text-zinc-400 hover:text-zinc-300 hover:bg-zinc-900/60'
           }`}
         >
           <div className="flex items-center space-x-2">
@@ -76,10 +76,10 @@ export const VconSidebar: React.FC<Props> = ({
 
         <button
           onClick={() => onSelectTab('add')}
-          className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-[11px] font-medium transition cursor-pointer ${
+          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded text-[11px] font-medium transition cursor-pointer ${
             activeTab === 'add'
-              ? 'bg-zinc-800 text-white'
-              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+              ? 'bg-zinc-850 text-zinc-200'
+              : 'text-zinc-400 hover:text-zinc-300 hover:bg-zinc-900/60'
           }`}
         >
           <div className="flex items-center space-x-2">
@@ -90,10 +90,10 @@ export const VconSidebar: React.FC<Props> = ({
 
         <button
           onClick={() => onSelectTab('settings')}
-          className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-[11px] font-medium transition cursor-pointer ${
+          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded text-[11px] font-medium transition cursor-pointer ${
             activeTab === 'settings'
-              ? 'bg-zinc-800 text-white'
-              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+              ? 'bg-zinc-850 text-zinc-200'
+              : 'text-zinc-400 hover:text-zinc-300 hover:bg-zinc-900/60'
           }`}
         >
           <div className="flex items-center space-x-2">
@@ -102,16 +102,16 @@ export const VconSidebar: React.FC<Props> = ({
           </div>
         </button>
 
-        <div className="pt-2 pb-1 px-2 text-[9px] font-semibold text-zinc-500 uppercase tracking-wider font-mono">
+        <div className="pt-2 pb-1 px-2.5 text-[9px] font-medium text-zinc-500 uppercase tracking-wider font-mono">
           System
         </div>
 
         <button
           onClick={() => onSelectTab('turso')}
-          className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-[11px] font-medium transition cursor-pointer ${
+          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded text-[11px] font-medium transition cursor-pointer ${
             activeTab === 'turso'
-              ? 'bg-zinc-800 text-white'
-              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+              ? 'bg-zinc-850 text-zinc-200'
+              : 'text-zinc-400 hover:text-zinc-300 hover:bg-zinc-900/60'
           }`}
         >
           <div className="flex items-center space-x-2">
@@ -127,10 +127,10 @@ export const VconSidebar: React.FC<Props> = ({
 
         <button
           onClick={() => onSelectTab('r2')}
-          className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-[11px] font-medium transition cursor-pointer ${
+          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded text-[11px] font-medium transition cursor-pointer ${
             activeTab === 'r2'
-              ? 'bg-zinc-800 text-white'
-              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+              ? 'bg-zinc-850 text-zinc-200'
+              : 'text-zinc-400 hover:text-zinc-300 hover:bg-zinc-900/60'
           }`}
         >
           <div className="flex items-center space-x-2">
@@ -146,10 +146,10 @@ export const VconSidebar: React.FC<Props> = ({
 
         <button
           onClick={() => onSelectTab('deploy')}
-          className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-[11px] font-medium transition cursor-pointer ${
+          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded text-[11px] font-medium transition cursor-pointer ${
             activeTab === 'deploy'
-              ? 'bg-zinc-800 text-white'
-              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+              ? 'bg-zinc-850 text-zinc-200'
+              : 'text-zinc-400 hover:text-zinc-300 hover:bg-zinc-900/60'
           }`}
         >
           <div className="flex items-center space-x-2">
@@ -160,7 +160,7 @@ export const VconSidebar: React.FC<Props> = ({
       </nav>
 
       {/* Footer Actions */}
-      <div className="p-2 border-t border-zinc-800/80 space-y-0.5">
+      <div className="p-2 space-y-0.5">
         <a
           href="/"
           onClick={(e) => {
@@ -168,7 +168,7 @@ export const VconSidebar: React.FC<Props> = ({
             window.history.pushState({}, '', '/');
             window.dispatchEvent(new PopStateEvent('popstate'));
           }}
-          className="flex items-center justify-between px-2 py-1.5 rounded text-[11px] text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition"
+          className="flex items-center justify-between px-2.5 py-1.5 rounded text-[11px] text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 transition"
         >
           <span className="flex items-center space-x-2">
             <ExternalLink className="w-3.5 h-3.5" />
@@ -179,7 +179,7 @@ export const VconSidebar: React.FC<Props> = ({
 
         <button
           onClick={onLogout}
-          className="w-full flex items-center space-x-2 px-2 py-1.5 rounded text-[11px] text-zinc-400 hover:text-rose-400 hover:bg-zinc-900 transition cursor-pointer"
+          className="w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-[11px] text-zinc-400 hover:text-rose-400 hover:bg-zinc-900/60 transition cursor-pointer"
         >
           <LogOut className="w-3.5 h-3.5" />
           <span>Sign Out</span>
