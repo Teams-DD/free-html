@@ -77,8 +77,8 @@ async function startServer() {
         res.setHeader(key, val);
       });
 
-      const responseBody = await webResponse.text();
-      res.send(responseBody);
+      const arrayBuffer = await webResponse.arrayBuffer();
+      res.send(Buffer.from(arrayBuffer));
     } catch (err: any) {
       console.error('API Error:', err);
       res.status(500).json({ error: err?.message || 'Internal server error' });

@@ -12,6 +12,10 @@ import {
   Eye,
   EyeOff,
   BarChart3,
+  Copy,
+  Check,
+  FolderOpen,
+  FileText,
 } from 'lucide-react';
 import { SystemStatus } from '../../types.ts';
 
@@ -27,6 +31,13 @@ interface Props {
     publicDomain?: string;
   }) => Promise<{ success: boolean; message?: string; error?: string }>;
   onDeleteR2Config: () => Promise<boolean>;
+}
+
+interface R2BucketFile {
+  key: string;
+  size: number;
+  lastModified?: string;
+  url: string;
 }
 
 export const R2Manager: React.FC<Props> = ({
@@ -51,16 +62,49 @@ export const R2Manager: React.FC<Props> = ({
     status.message,
   ]);
 
+  // Bucket files listing state
+  const [bucketFiles, setBucketFiles] = useState<R2BucketFile[] | null>(null);
+  const [loadingFiles, setLoadingFiles] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
   // Sync state if status changes from server
   useEffect(() => {
     if (status.accountId && !accountId) setAccountId(status.accountId);
     if (status.accessKeyId && !accessKeyId) setAccessKeyId(status.accessKeyId);
     if (status.bucket && bucketName === 'html-templates') setBucketName(status.bucket);
-    if (status.publicDomain && !publicDomain) setPublicDomain(status.publicDomain);
+    if (status.publicDomain !== undefined) setPublicDomain(status.publicDomain || '');
   }, [status]);
 
   const addLog = (msg: string) => {
     setLogs((prev) => [...prev.slice(-15), `[${new Date().toLocaleTimeString()}] ${msg}`]);
+  };
+
+  const fetchBucketFiles = async () => {
+    setLoadingFiles(true);
+    try {
+      const token = localStorage.getItem('vcon_token') || '';
+      const res = await fetch('/api/vcon/r2-files', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data: any = await res.json();
+      if (data.success && Array.isArray(data.files)) {
+        setBucketFiles(data.files);
+        addLog(`Successfully loaded ${data.files.length} file(s) from R2 bucket.`);
+      } else {
+        addLog(`Could not list R2 files: ${data.error || 'Check credentials'}`);
+      }
+    } catch (err: any) {
+      addLog(`Error listing R2 files: ${err?.message}`);
+    } finally {
+      setLoadingFiles(false);
+    }
+  };
+
+  const handleCopyUrl = (url: string, key: string) => {
+    const fullUrl = url.startsWith('/') ? `${window.location.origin}${url}` : url;
+    navigator.clipboard.writeText(fullUrl);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
   };
 
   const handleTest = async () => {
@@ -69,10 +113,15 @@ export const R2Manager: React.FC<Props> = ({
     addLog('Testing Cloudflare R2 bucket connection and credentials...');
     try {
       const res = await onTestConnection();
+      const deliveryMode = publicDomain.trim()
+        ? `Custom public domain (${publicDomain.trim()})`
+        : 'Built-in API endpoint fallback (/api/r2/file/...)';
       const msg = res.message || (res as any).error || (res.success ? 'Connected successfully.' : 'Connection failed.');
       addLog(msg);
+      addLog(`Active file delivery mode: ${deliveryMode}`);
       if (res.success) {
-        setFeedback({ type: 'success', text: msg });
+        setFeedback({ type: 'success', text: `${msg} File delivery: ${deliveryMode}` });
+        fetchBucketFiles();
       } else {
         setFeedback({ type: 'error', text: msg });
       }
@@ -111,14 +160,19 @@ export const R2Manager: React.FC<Props> = ({
       });
 
       if (res.success) {
+        const mode = publicDomain.trim()
+          ? `Custom domain: ${publicDomain.trim()}`
+          : 'Built-in API endpoint fallback: /api/r2/file/...';
         const msg = res.message || 'Cloudflare R2 credentials successfully saved to database.';
         addLog(msg);
+        addLog(`File delivery configured: ${mode}`);
         setFeedback({
           type: 'success',
-          text: msg,
+          text: `${msg} (${mode})`,
         });
         setSecretAccessKey('');
         onRefresh();
+        fetchBucketFiles();
       } else {
         const errText = res.error || res.message || 'Failed to save credentials';
         addLog(`Save failed: ${errText}`);
@@ -147,6 +201,7 @@ export const R2Manager: React.FC<Props> = ({
         setAccessKeyId('');
         setSecretAccessKey('');
         setPublicDomain('');
+        setBucketFiles(null);
         addLog('R2 configuration removed successfully.');
         setFeedback({ type: 'success', text: 'R2 configuration removed from database.' });
         onRefresh();
@@ -184,7 +239,10 @@ export const R2Manager: React.FC<Props> = ({
         </div>
         <div className="flex items-center space-x-2">
           <button
-            onClick={onRefresh}
+            onClick={() => {
+              onRefresh();
+              if (status.connected) fetchBucketFiles();
+            }}
             className="p-1.5 bg-[#14151b] hover:bg-[#1a1b22] text-zinc-400 hover:text-zinc-200 border border-[#22242b] rounded transition cursor-pointer"
             title="Refresh status & storage report"
           >
@@ -294,6 +352,18 @@ export const R2Manager: React.FC<Props> = ({
             {status.message}
           </p>
 
+          {/* File Delivery Method Indicator */}
+          <div className="flex flex-wrap items-center gap-2 pt-0.5">
+            <div className="text-[10px] font-mono px-2.5 py-1 rounded bg-[#0c0d10] border border-[#1f2026] text-zinc-400 flex items-center space-x-1.5">
+              <span className="text-zinc-500">File Delivery Mode:</span>
+              {status.publicDomain ? (
+                <span className="text-cyan-400 font-medium">Custom Domain ({status.publicDomain})</span>
+              ) : (
+                <span className="text-emerald-400 font-medium">Built-in API Proxy Fallback (/api/r2/file/...)</span>
+              )}
+            </div>
+          </div>
+
           {feedback && (
             <div
               className={`p-2.5 rounded text-[11px] border ${
@@ -316,6 +386,17 @@ export const R2Manager: React.FC<Props> = ({
               <span>Test Connection</span>
             </button>
 
+            {status.connected && (
+              <button
+                onClick={fetchBucketFiles}
+                disabled={loadingFiles}
+                className="px-3 py-1.5 bg-[#14151b] hover:bg-[#1c1d25] text-zinc-300 border border-[#22242b] rounded text-[11px] font-medium transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <FolderOpen className="w-3 h-3 text-zinc-400" />
+                <span>{loadingFiles ? 'Loading Files...' : 'Browse Bucket Files'}</span>
+              </button>
+            )}
+
             {status.configured && (
               <button
                 onClick={handleDelete}
@@ -328,6 +409,106 @@ export const R2Manager: React.FC<Props> = ({
             )}
           </div>
         </div>
+
+        {/* Bucket Files Explorer */}
+        {status.connected && (
+          <div className="bg-[#121317] border border-[#22242b] rounded-lg p-4 space-y-3 max-w-4xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <FolderOpen className="w-4 h-4 text-zinc-400" />
+                <span className="font-semibold text-zinc-200 uppercase text-[10px] tracking-wider">
+                  R2 Bucket Files Explorer
+                </span>
+              </div>
+              <button
+                onClick={fetchBucketFiles}
+                disabled={loadingFiles}
+                className="text-[10px] text-zinc-400 hover:text-zinc-200 flex items-center space-x-1 bg-[#0c0d10] border border-[#1f2026] px-2 py-1 rounded transition cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3 h-3 ${loadingFiles ? 'animate-spin' : ''}`} />
+                <span>{loadingFiles ? 'Refreshing...' : 'Refresh Files'}</span>
+              </button>
+            </div>
+
+            {bucketFiles === null ? (
+              <div className="bg-[#0c0d10] p-4 rounded border border-[#1f2026] text-center">
+                <p className="text-zinc-400 text-xs mb-2">
+                  Verify files uploaded and served through Cloudflare R2.
+                </p>
+                <button
+                  onClick={fetchBucketFiles}
+                  disabled={loadingFiles}
+                  className="px-3 py-1.5 bg-[#181a22] hover:bg-[#20222d] text-zinc-200 rounded text-xs border border-[#232634] transition cursor-pointer"
+                >
+                  {loadingFiles ? 'Loading...' : 'Load Files List'}
+                </button>
+              </div>
+            ) : bucketFiles.length === 0 ? (
+              <div className="bg-[#0c0d10] p-4 rounded border border-[#1f2026] text-center text-zinc-500 text-xs">
+                No files found in bucket "{status.bucket}". Upload a template or branding asset to store files.
+              </div>
+            ) : (
+              <div className="bg-[#0c0d10] border border-[#1f2026] rounded overflow-hidden">
+                <div className="max-h-60 overflow-y-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-[#14151b] border-b border-[#1f2026] text-zinc-500 uppercase text-[9px] font-mono tracking-wider sticky top-0">
+                        <th className="py-2 px-3">File Key</th>
+                        <th className="py-2 px-3">Size</th>
+                        <th className="py-2 px-3">Access Delivery URL</th>
+                        <th className="py-2 px-3 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#181920]">
+                      {bucketFiles.map((file) => (
+                        <tr key={file.key} className="hover:bg-[#121318] transition-colors">
+                          <td className="py-2 px-3 font-mono text-[11px] text-zinc-200">
+                            <div className="flex items-center space-x-1.5">
+                              <FileText className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                              <span className="truncate max-w-[220px]" title={file.key}>
+                                {file.key}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-2 px-3 font-mono text-[10px] text-zinc-400">
+                            {(file.size / 1024).toFixed(1)} KB
+                          </td>
+                          <td className="py-2 px-3 font-mono text-[10px] text-zinc-400 truncate max-w-[260px]" title={file.url}>
+                            {file.url}
+                          </td>
+                          <td className="py-2 px-3 text-right">
+                            <div className="flex items-center justify-end space-x-1.5">
+                              <button
+                                onClick={() => handleCopyUrl(file.url, file.key)}
+                                className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-[#1c1d25] rounded transition cursor-pointer"
+                                title="Copy public URL"
+                              >
+                                {copiedKey === file.key ? (
+                                  <Check className="w-3 h-3 text-emerald-400" />
+                                ) : (
+                                  <Copy className="w-3 h-3" />
+                                )}
+                              </button>
+                              <a
+                                href={file.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-1 text-zinc-400 hover:text-cyan-400 hover:bg-[#1c1d25] rounded transition inline-flex items-center"
+                                title="Open / Preview in new tab"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* R2 Credentials Form */}
         <div className="bg-[#121317] border border-[#22242b] rounded-lg p-4 space-y-3 max-w-4xl">
@@ -407,16 +588,32 @@ export const R2Manager: React.FC<Props> = ({
             </div>
 
             <div>
-              <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">
-                Public Domain (Optional)
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[10px] text-zinc-400 uppercase tracking-wider">
+                  Public Domain (Optional)
+                </label>
+                {publicDomain.trim() ? (
+                  <span className="text-[9px] text-cyan-400 font-mono bg-cyan-950/30 border border-cyan-900/40 px-1.5 py-0.5 rounded">
+                    Custom Domain Active
+                  </span>
+                ) : (
+                  <span className="text-[9px] text-emerald-400 font-mono bg-emerald-950/30 border border-emerald-900/40 px-1.5 py-0.5 rounded">
+                    API Fallback Active (/api/r2/file/...)
+                  </span>
+                )}
+              </div>
               <input
                 type="text"
-                placeholder="e.g. https://cdn.domain.com"
+                placeholder="e.g. https://cdn.domain.com or https://pub-xxx.r2.dev"
                 value={publicDomain}
                 onChange={(e) => setPublicDomain(e.target.value)}
                 className="w-full px-2.5 py-1.5 bg-[#0c0d10] border border-[#22242b] rounded text-xs text-zinc-200 font-mono placeholder-zinc-600 focus:outline-none focus:border-[#383b47]"
               />
+              <p className="text-[10px] text-zinc-500 mt-1 leading-relaxed">
+                {publicDomain.trim()
+                  ? `Files will be served directly from ${publicDomain.trim()}.`
+                  : 'No public domain required. Files are automatically served using the built-in API proxy endpoint (/api/r2/file/...). If you add a custom public domain, it will be used instead.'}
+              </p>
             </div>
 
             <div className="pt-1 flex items-center justify-end">

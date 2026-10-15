@@ -146,54 +146,52 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
     setUploadingAsset(field);
     setBrandingFeedback(null);
 
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('type', field);
+    const reader = new FileReader();
+    reader.onload = async (uploadEvt) => {
+      const fileData = uploadEvt.target?.result as string;
+      try {
+        const res = await fetch('/api/vcon/upload-asset', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            filename: file.name,
+            fileData,
+            assetType: field,
+          }),
+        });
 
-      const res = await fetch('/api/vcon/upload-asset', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-
-      const data: any = await res.json();
-      if (res.ok && data.success && data.url) {
-        if (field === 'logo') setAppLogo(data.url);
-        if (field === 'favicon') setFaviconUrl(data.url);
-        if (field === 'ogImage') setOgImage(data.url);
-        setBrandingFeedback({ type: 'success', text: `${field.toUpperCase()} uploaded successfully.` });
-      } else {
-        const reader = new FileReader();
-        reader.onload = (uploadEvt) => {
-          const base64 = uploadEvt.target?.result as string;
-          if (field === 'logo') setAppLogo(base64);
-          if (field === 'favicon') setFaviconUrl(base64);
-          if (field === 'ogImage') setOgImage(base64);
+        const data: any = await res.json();
+        if (res.ok && data.success && data.url) {
+          if (field === 'logo') setAppLogo(data.url);
+          if (field === 'favicon') setFaviconUrl(data.url);
+          if (field === 'ogImage') setOgImage(data.url);
+          setBrandingFeedback({ type: 'success', text: `${field.toUpperCase()} uploaded to R2 successfully.` });
+        } else {
+          if (field === 'logo') setAppLogo(fileData);
+          if (field === 'favicon') setFaviconUrl(fileData);
+          if (field === 'ogImage') setOgImage(fileData);
           setBrandingFeedback({
             type: 'success',
             text: `${field.toUpperCase()} loaded (local preview). Click Save Settings to persist.`,
           });
-        };
-        reader.readAsDataURL(file);
-      }
-    } catch {
-      const reader = new FileReader();
-      reader.onload = (uploadEvt) => {
-        const base64 = uploadEvt.target?.result as string;
-        if (field === 'logo') setAppLogo(base64);
-        if (field === 'favicon') setFaviconUrl(base64);
-        if (field === 'ogImage') setOgImage(base64);
+        }
+      } catch {
+        if (field === 'logo') setAppLogo(fileData);
+        if (field === 'favicon') setFaviconUrl(fileData);
+        if (field === 'ogImage') setOgImage(fileData);
         setBrandingFeedback({
           type: 'success',
           text: `${field.toUpperCase()} loaded (local preview). Click Save Settings to persist.`,
         });
-      };
-      reader.readAsDataURL(file);
-    } finally {
-      setUploadingAsset(null);
-      e.target.value = '';
-    }
+      } finally {
+        setUploadingAsset(null);
+        e.target.value = '';
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   // Add Admin

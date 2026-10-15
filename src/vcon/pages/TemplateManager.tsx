@@ -7,6 +7,7 @@ import {
   Eye,
   RefreshCw,
   Layers,
+  ExternalLink,
 } from 'lucide-react';
 import { HtmlTemplate } from '../../types.ts';
 
@@ -143,9 +144,16 @@ export const TemplateManager: React.FC<Props> = ({
                   <td className="py-2 px-4 text-zinc-400 font-mono text-[11px]">{item.downloads}</td>
                   <td className="py-2 px-4">
                     {item.r2_key ? (
-                      <span className="text-[10px] text-emerald-400/90 font-mono bg-emerald-950/30 border border-emerald-900/40 px-1.5 py-0.5 rounded">
-                        R2 Synced
-                      </span>
+                      <a
+                        href={item.r2_url || `/api/r2/file/${item.r2_key}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[10px] text-emerald-400/90 font-mono bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-900/40 px-1.5 py-0.5 rounded inline-flex items-center space-x-1 transition"
+                        title="Open file via R2 delivery"
+                      >
+                        <span>R2 Synced</span>
+                        <ExternalLink className="w-2.5 h-2.5 opacity-70" />
+                      </a>
                     ) : (
                       <span className="text-[10px] text-zinc-500 font-mono bg-[#14151b] border border-[#22242b] px-1.5 py-0.5 rounded">
                         Turso

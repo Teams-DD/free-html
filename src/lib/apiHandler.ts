@@ -16,6 +16,12 @@ import {
   uploadTemplateToR2,
   deleteTemplateFromR2,
   testR2Connection,
+  getR2ObjectUrl,
+  resolveFileUrl,
+  getObjectFromR2,
+  getObjectNativeR2,
+  listR2Objects,
+  listNativeR2Objects,
 } from './r2.ts';
 import { createAdminToken, verifyAdminToken } from './auth.ts';
 
@@ -111,7 +117,8 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
         bucket: nativeBucket ? 'Native Cloudflare Bucket Binding' : r2Bucket,
         accountId: r2AccountId,
         accessKeyId: r2AccessKeyId,
-        publicDomain: r2PublicDomain,
+        publicDomain: r2PublicDomain || '',
+        effectiveAccessMode: r2PublicDomain ? 'Custom Public Domain' : 'API Endpoint Fallback',
         stats: {
           totalFiles: 0,
           totalBytes: 0,
@@ -162,12 +169,100 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
     return json({ success: true, status });
   }
 
+  // GET or HEAD /api/r2/file/* or /api/r2/object/* or /api/r2/file?key=...
+  // Serves Cloudflare R2 files directly when no public domain is specified, or as a reliable fallback.
+  const r2FilePrefix = '/api/r2/file/';
+  const r2ObjPrefix = '/api/r2/object/';
+  let r2KeyRequested: string | null = null;
+
+  if (pathname.startsWith(r2FilePrefix)) {
+    r2KeyRequested = pathname.slice(r2FilePrefix.length);
+  } else if (pathname.startsWith(r2ObjPrefix)) {
+    r2KeyRequested = pathname.slice(r2ObjPrefix.length);
+  } else if (pathname === '/api/r2/file' || pathname === '/api/r2/object') {
+    r2KeyRequested = url.searchParams.get('key');
+  }
+
+  if (r2KeyRequested && (method === 'GET' || method === 'HEAD')) {
+    const cleanKey = decodeURIComponent(r2KeyRequested).replace(/^\/+/, '');
+
+    // 1. If native Cloudflare R2 bucket is available
+    if (nativeBucket) {
+      try {
+        const fileRes = await getObjectNativeR2(nativeBucket, cleanKey);
+        if (fileRes.success && fileRes.data) {
+          return new Response(method === 'HEAD' ? null : (fileRes.data as any), {
+            status: 200,
+            headers: {
+              'Content-Type': fileRes.contentType || 'application/octet-stream',
+              'Cache-Control': fileRes.cacheControl || 'public, max-age=86400, stale-while-revalidate=604800',
+              'Access-Control-Allow-Origin': '*',
+              'Content-Length': String(fileRes.data.length),
+            },
+          });
+        }
+      } catch (err: any) {
+        console.error('Error fetching object from native R2:', err);
+      }
+    }
+
+    // 2. If R2 S3 client is configured
+    if (r2Client && r2Bucket) {
+      try {
+        const fileRes = await getObjectFromR2(r2Client, r2Bucket, cleanKey);
+        if (fileRes.success && fileRes.data) {
+          return new Response(method === 'HEAD' ? null : (fileRes.data as any), {
+            status: 200,
+            headers: {
+              'Content-Type': fileRes.contentType || 'application/octet-stream',
+              'Cache-Control': fileRes.cacheControl || 'public, max-age=86400, stale-while-revalidate=604800',
+              'Access-Control-Allow-Origin': '*',
+              'Content-Length': String(fileRes.data.length),
+            },
+          });
+        }
+      } catch (err: any) {
+        console.error('Error fetching object from R2 S3:', err);
+      }
+    }
+
+    // 3. Fallback: If it's a template key (templates/<slug>.html), serve from Turso DB
+    if (cleanKey.startsWith('templates/') && cleanKey.endsWith('.html')) {
+      const slug = cleanKey.replace(/^templates\//, '').replace(/\.html$/, '');
+      const template = await getTemplateBySlug(tursoClient, slug);
+      if (template?.html_content) {
+        return new Response(method === 'HEAD' ? null : template.html_content, {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'public, max-age=3600',
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
+      }
+    }
+
+    return new Response(`Object "${cleanKey}" not found in R2 storage.`, {
+      status: 404,
+      headers: {
+        'Content-Type': 'text/plain',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
+  }
+
   // GET /api/settings - Public site branding and configuration
   if (pathname === '/api/settings' && method === 'GET') {
     try {
       const { getSiteSettings } = await import('./turso.ts');
       const settings = await getSiteSettings(tursoClient);
-      return json({ success: true, settings });
+      const mapped = {
+        ...settings,
+        app_logo: resolveFileUrl(settings.app_logo, r2PublicDomain),
+        favicon_url: resolveFileUrl(settings.favicon_url, r2PublicDomain),
+        og_image: resolveFileUrl(settings.og_image, r2PublicDomain),
+      };
+      return json({ success: true, settings: mapped });
     } catch {
       return json({
         success: true,
@@ -190,7 +285,13 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
       const sort = (url.searchParams.get('sort') as any) || 'newest';
 
       const items = await getTemplates(tursoClient, { category, search, sort });
-      return json({ success: true, count: items.length, items });
+      const mapped = items.map((item) => ({
+        ...item,
+        r2_url: item.r2_key
+          ? getR2ObjectUrl(item.r2_key, r2PublicDomain)
+          : (item.r2_url ? resolveFileUrl(item.r2_url, r2PublicDomain) : null),
+      }));
+      return json({ success: true, count: mapped.length, items: mapped });
     } catch (err: any) {
       return json({ success: false, error: err?.message || 'Failed to fetch templates' }, 500);
     }
@@ -227,6 +328,12 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
     const slug = singleMatch[1];
     const template = await getTemplateBySlug(tursoClient, slug);
     if (!template) return json({ success: false, error: 'Template not found' }, 404);
+
+    if (template.r2_key) {
+      template.r2_url = getR2ObjectUrl(template.r2_key, r2PublicDomain);
+    } else if (template.r2_url) {
+      template.r2_url = resolveFileUrl(template.r2_url, r2PublicDomain);
+    }
 
     // Increment view count asynchronously
     incrementViews(tursoClient, slug).catch(() => {});
@@ -470,6 +577,22 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
       return json({ success: true, stats });
     }
 
+    // GET /api/vcon/r2-files - List files in R2 bucket
+    if (pathname === '/api/vcon/r2-files' && method === 'GET') {
+      const prefix = url.searchParams.get('prefix') || '';
+      if (nativeBucket) {
+        const { listNativeR2Objects } = await import('./r2.ts');
+        const res = await listNativeR2Objects(nativeBucket, prefix, 100, r2PublicDomain);
+        return json(res);
+      }
+      if (r2Client && r2Bucket) {
+        const { listR2Objects } = await import('./r2.ts');
+        const res = await listR2Objects(r2Client, r2Bucket, prefix, 100, r2PublicDomain);
+        return json(res);
+      }
+      return json({ success: false, error: 'Cloudflare R2 is not configured or connected.' }, 400);
+    }
+
     // GET /api/vcon/categories - List all categories
     if (pathname === '/api/vcon/categories' && method === 'GET') {
       if (!tursoClient) return json({ success: false, error: 'Database not configured.' }, 503);
@@ -679,7 +802,13 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
       if (!tursoClient) return json({ success: false, error: 'Database not configured.' }, 503);
       const { getSiteSettings } = await import('./turso.ts');
       const settings = await getSiteSettings(tursoClient);
-      return json({ success: true, settings });
+      const mapped = {
+        ...settings,
+        app_logo: resolveFileUrl(settings.app_logo, r2PublicDomain),
+        favicon_url: resolveFileUrl(settings.favicon_url, r2PublicDomain),
+        og_image: resolveFileUrl(settings.og_image, r2PublicDomain),
+      };
+      return json({ success: true, settings: mapped });
     }
 
     // POST /api/vcon/settings - Save site settings
@@ -695,7 +824,13 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
           favicon_url: body.favicon_url,
           og_image: body.og_image,
         });
-        return json({ success: true, settings, message: 'Settings saved successfully.' });
+        const mapped = {
+          ...settings,
+          app_logo: resolveFileUrl(settings.app_logo, r2PublicDomain),
+          favicon_url: resolveFileUrl(settings.favicon_url, r2PublicDomain),
+          og_image: resolveFileUrl(settings.og_image, r2PublicDomain),
+        };
+        return json({ success: true, settings: mapped, message: 'Settings saved successfully.' });
       } catch (err: any) {
         return json({ success: false, error: err?.message || 'Failed to save settings' }, 500);
       }
