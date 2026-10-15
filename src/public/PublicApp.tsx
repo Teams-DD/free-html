@@ -172,7 +172,7 @@ export const PublicApp: React.FC = () => {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-300 flex flex-col font-sans selection:bg-zinc-800 selection:text-zinc-300 antialiased">
       {/* Clean, Smooth Minimal Header */}
-      <header className="bg-zinc-950/90 px-4 py-2.5 flex items-center justify-between sticky top-0 z-30 shrink-0">
+      <header className="public-header bg-zinc-950/90 px-4 py-2.5 flex items-center justify-between sticky top-0 z-30 shrink-0">
         <div className="flex items-center space-x-3">
           <div className="flex items-center space-x-2">
             {settings.app_logo ? (
@@ -250,7 +250,7 @@ export const PublicApp: React.FC = () => {
             {filteredSnippets.map((item) => (
               <div
                 key={item.id}
-                className="bg-zinc-900/80 hover:bg-zinc-900 rounded-lg transition-all duration-150 flex flex-col overflow-hidden group h-full shadow-xs"
+                className="snippet-card bg-zinc-900/80 hover:bg-zinc-900 rounded-lg transition-all duration-150 flex flex-col overflow-hidden group h-full"
               >
                 {/* HTML Preview Frame */}
                 <div className="h-56 sm:h-60 bg-zinc-950 relative overflow-hidden flex items-center justify-center">

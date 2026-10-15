@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+.snippet-card {
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.public-header {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
 @layer base {
   /* Globally eliminate harsh white borders from all elements */
   *, ::before, ::after {
