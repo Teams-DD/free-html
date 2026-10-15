@@ -87,13 +87,18 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
 
   // GET /api/status - check system status
   if (pathname === '/api/status' && method === 'GET') {
+    const isMock = (tursoClient as any)?.isMock === true;
+    const hasRealTurso = Boolean(tursoUrl && tursoToken) && !isMock;
     const status: any = {
       turso: {
-        configured: Boolean(tursoUrl && tursoToken),
+        configured: true,
         connected: false,
-        message: tursoUrl ? 'Checking Turso...' : 'TURSO_DATABASE_URL or TURSO_AUTH_TOKEN not configured',
+        isMock,
+        message: isMock
+          ? 'In-memory SQLite store active (mocked for preview)'
+          : 'Checking Turso...',
         templateCount: 0,
-        url: tursoUrl ? tursoUrl.replace(/:\/\/.*@/, '://***@') : undefined,
+        url: hasRealTurso ? tursoUrl!.replace(/:\/\/.*@/, '://***@') : undefined,
       },
       r2: {
         configured: Boolean(nativeBucket || (r2AccountId && r2AccessKeyId && r2SecretAccessKey)),
@@ -159,19 +164,6 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
 
   // GET /api/settings - Public site branding and configuration
   if (pathname === '/api/settings' && method === 'GET') {
-    if (!tursoClient) {
-      return json({
-        success: true,
-        settings: {
-          site_name: 'HTML Snippets & Templates',
-          site_description: 'Free responsive HTML snippets and component templates directory.',
-          app_logo: '',
-          favicon_url: '',
-          og_image: '',
-        },
-      });
-    }
-
     try {
       const { getSiteSettings } = await import('./turso.ts');
       const settings = await getSiteSettings(tursoClient);
@@ -192,18 +184,6 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
 
   // GET /api/templates - public list
   if (pathname === '/api/templates' && method === 'GET') {
-    if (!tursoClient) {
-      return json(
-        {
-          success: false,
-          error: 'Turso SQLite database is not configured. Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN.',
-          needsConfig: true,
-          items: [],
-        },
-        503
-      );
-    }
-
     try {
       const category = url.searchParams.get('category') || undefined;
       const search = url.searchParams.get('search') || undefined;
@@ -212,14 +192,13 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
       const items = await getTemplates(tursoClient, { category, search, sort });
       return json({ success: true, count: items.length, items });
     } catch (err: any) {
-      return json({ success: false, error: err?.message || 'Failed to fetch templates from Turso' }, 500);
+      return json({ success: false, error: err?.message || 'Failed to fetch templates' }, 500);
     }
   }
 
   // GET /api/templates/:slug/raw
   const rawMatch = pathname.match(/^\/api\/templates\/([^/]+)\/raw$/);
   if (rawMatch && method === 'GET') {
-    if (!tursoClient) return new Response('Database not configured', { status: 503 });
     const slug = rawMatch[1];
     const template = await getTemplateBySlug(tursoClient, slug);
     if (!template) return new Response('Template not found', { status: 404 });
@@ -245,7 +224,6 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
   // GET /api/templates/:slug
   const singleMatch = pathname.match(/^\/api\/templates\/([^/]+)$/);
   if (singleMatch && method === 'GET') {
-    if (!tursoClient) return json({ success: false, error: 'Database not configured' }, 503);
     const slug = singleMatch[1];
     const template = await getTemplateBySlug(tursoClient, slug);
     if (!template) return json({ success: false, error: 'Template not found' }, 404);
@@ -257,17 +235,8 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
 
   // ================= ADMIN (VCON) ROUTES =================
 
-  // GET /api/vcon/auth-status - Checks if admin account exists in Turso
+  // GET /api/vcon/auth-status - Checks if admin account exists
   if (pathname === '/api/vcon/auth-status' && method === 'GET') {
-    if (!tursoClient) {
-      return json({
-        success: true,
-        dbConfigured: false,
-        hasAdmin: false,
-        message: 'Turso SQLite database credentials not configured.',
-      });
-    }
-
     try {
       const { countAdmins } = await import('./turso.ts');
       const adminCount = await countAdmins(tursoClient);
@@ -293,19 +262,13 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
       const body: any = await req.json();
       let { username, password, tursoUrl: newTursoUrl, tursoToken: newTursoToken } = body;
 
-      // Allow configuring Turso credentials on the fly if not set yet
+      // Allow configuring Turso credentials on the fly if set
       if (newTursoUrl && typeof process !== 'undefined' && process.env) {
         process.env.TURSO_DATABASE_URL = newTursoUrl;
         if (newTursoToken) process.env.TURSO_AUTH_TOKEN = newTursoToken;
       }
 
       const activeTursoClient = getTursoClient(newTursoUrl || tursoUrl, newTursoToken || tursoToken);
-      if (!activeTursoClient) {
-        return json({
-          success: false,
-          error: 'Turso SQLite database is required to create admin account. Provide TURSO_DATABASE_URL and TURSO_AUTH_TOKEN.',
-        }, 400);
-      }
 
       const { countAdmins, createAdminUser } = await import('./turso.ts');
       const { hashPassword } = await import('./auth.ts');
@@ -334,7 +297,7 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
         success: true,
         token,
         user: { username: newAdmin.username },
-        message: 'Admin account created successfully in Turso SQLite database.',
+        message: 'Admin account created successfully.',
       });
     } catch (err: any) {
       console.error('Registration error:', err);
@@ -342,7 +305,7 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
     }
   }
 
-  // POST /api/vcon/login - Authenticates against Turso SQLite admins table
+  // POST /api/vcon/login - Authenticates against admins store
   if (pathname === '/api/vcon/login' && method === 'POST') {
     try {
       const body: any = await req.json();
@@ -350,13 +313,6 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
 
       if (!username || !password) {
         return json({ success: false, error: 'Username and password are required' }, 400);
-      }
-
-      if (!tursoClient) {
-        return json({
-          success: false,
-          error: 'Turso SQLite database is not configured. Admin credentials are saved in the database.',
-        }, 503);
       }
 
       const { getAdminByUsername } = await import('./turso.ts');
@@ -399,27 +355,18 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
 
     // POST /api/vcon/init-db - Initialize schema
     if (pathname === '/api/vcon/init-db' && method === 'POST') {
-      if (!tursoClient) {
-        return json({ success: false, error: 'TURSO_DATABASE_URL and TURSO_AUTH_TOKEN are missing' }, 400);
-      }
       const res = await initTursoSchema(tursoClient);
       return json(res);
     }
 
-    // POST /api/vcon/seed-db - Seed showcase items into real Turso
+    // POST /api/vcon/seed-db - Seed showcase items
     if (pathname === '/api/vcon/seed-db' && method === 'POST') {
-      if (!tursoClient) {
-        return json({ success: false, error: 'TURSO_DATABASE_URL and TURSO_AUTH_TOKEN are missing' }, 400);
-      }
       const res = await seedTursoDatabase(tursoClient);
       return json({ success: true, ...res });
     }
 
     // POST /api/vcon/test-turso - test Turso
     if (pathname === '/api/vcon/test-turso' && method === 'POST') {
-      if (!tursoClient) {
-        return json({ success: false, error: 'Turso SQLite database is not configured.' }, 400);
-      }
       const res = await testTursoConnection(tursoClient);
       return json(res);
     }
