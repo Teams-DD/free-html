@@ -12,6 +12,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { Category } from '../../types.ts';
+import { AdminTablePagination } from '../components/AdminTablePagination.tsx';
 
 interface Props {
   categories: Category[];
@@ -20,6 +21,7 @@ interface Props {
   onSaveCategory: (data: { id?: string; name: string; slug: string; status?: 'active' | 'inactive' }) => Promise<{ success: boolean; error?: string }>;
   onToggleStatus: (id: string, status: 'active' | 'inactive') => Promise<boolean>;
   onDeleteCategory: (id: string) => Promise<boolean>;
+  onBulkDelete: (ids: string[]) => Promise<void>;
 }
 
 export const CategoryManager: React.FC<Props> = ({
@@ -29,8 +31,12 @@ export const CategoryManager: React.FC<Props> = ({
   onSaveCategory,
   onToggleStatus,
   onDeleteCategory,
+  onBulkDelete,
 }) => {
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
@@ -95,6 +101,24 @@ export const CategoryManager: React.FC<Props> = ({
       (c) => c.name.toLowerCase().includes(q) || c.slug.toLowerCase().includes(q)
     );
   }, [categories, search]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / 20));
+  const currentPage = Math.min(page, pageCount);
+  const pageItems = filtered.slice((currentPage - 1) * 20, currentPage * 20);
+  const allFilteredSelected = filtered.length > 0 && filtered.every((category) => selectedIds.has(category.id));
+
+  const handleBulkDelete = async () => {
+    const ids = filtered.filter((category) => selectedIds.has(category.id)).map((category) => category.id);
+    if (ids.length === 0 || !window.confirm(`Delete ${ids.length} selected categor${ids.length === 1 ? 'y' : 'ies'}?`)) return;
+
+    setBulkDeleting(true);
+    try {
+      await onBulkDelete(ids);
+      setSelectedIds(new Set());
+      setPage(1);
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
 
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-[#090a0c] text-xs overflow-hidden">
@@ -118,7 +142,11 @@ export const CategoryManager: React.FC<Props> = ({
               type="text"
               placeholder="Filter categories..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setSelectedIds(new Set());
+                setPage(1);
+              }}
               className="pl-7 pr-2.5 py-1 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-[#383b47] w-36 sm:w-48"
             />
           </div>
@@ -142,6 +170,30 @@ export const CategoryManager: React.FC<Props> = ({
         </div>
       </div>
 
+      {selectedIds.size > 0 && (
+        <div className="px-4 py-2 flex items-center justify-between shrink-0 bg-[#111216] border-b border-[#1c1d22]">
+          <span className="text-[10px] text-zinc-400 font-mono">{selectedIds.size} selected</span>
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set())}
+              className="px-2 py-1 text-zinc-400 hover:text-zinc-200 rounded transition"
+            >
+              Clear selection
+            </button>
+            <button
+              type="button"
+              onClick={handleBulkDelete}
+              disabled={bulkDeleting}
+              className="px-2.5 py-1 bg-rose-950/30 hover:bg-rose-950/50 text-rose-300 border border-rose-900/40 rounded text-[10px] font-medium transition flex items-center space-x-1.5 disabled:opacity-50"
+            >
+              <Trash2 className="w-3 h-3" />
+              <span>{bulkDeleting ? 'Deleting...' : 'Delete selected'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Table Content */}
       <div className="flex-1 overflow-auto bg-[#090a0c]">
         {filtered.length === 0 ? (
@@ -153,6 +205,22 @@ export const CategoryManager: React.FC<Props> = ({
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-[#0f1013] border-b border-[#1c1d22] text-zinc-400 uppercase text-[9px] font-mono tracking-wider sticky top-0 z-10">
+                <th className="py-2.5 pl-4 pr-1">
+                  <input
+                    type="checkbox"
+                    checked={allFilteredSelected}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setSelectedIds((previous) => {
+                        const next = new Set(previous);
+                        filtered.forEach((category) => checked ? next.add(category.id) : next.delete(category.id));
+                        return next;
+                      });
+                    }}
+                    aria-label="Select all filtered categories"
+                    className="accent-zinc-400"
+                  />
+                </th>
                 <th className="py-2.5 px-4">Name</th>
                 <th className="py-2.5 px-4">Slug</th>
                 <th className="py-2.5 px-4">Templates</th>
@@ -161,8 +229,25 @@ export const CategoryManager: React.FC<Props> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1c1d22]">
-              {filtered.map((cat) => (
+              {pageItems.map((cat) => (
                 <tr key={cat.id} className="hover:bg-[#121317] transition-colors">
+                  <td className="py-2 pl-4 pr-1">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(cat.id)}
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        setSelectedIds((previous) => {
+                          const next = new Set(previous);
+                          if (checked) next.add(cat.id);
+                          else next.delete(cat.id);
+                          return next;
+                        });
+                      }}
+                      aria-label={`Select category ${cat.name}`}
+                      className="accent-zinc-400"
+                    />
+                  </td>
                   <td className="py-2 px-4 font-medium text-zinc-200">{cat.name}</td>
                   <td className="py-2 px-4 font-mono text-zinc-400 text-[11px]">/{cat.slug}</td>
                   <td className="py-2 px-4 font-mono text-zinc-400 text-[11px]">
@@ -204,7 +289,16 @@ export const CategoryManager: React.FC<Props> = ({
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        onClick={() => onDeleteCategory(cat.id)}
+                        onClick={async () => {
+                          const deleted = await onDeleteCategory(cat.id);
+                          if (deleted) {
+                            setSelectedIds((previous) => {
+                              const next = new Set(previous);
+                              next.delete(cat.id);
+                              return next;
+                            });
+                          }
+                        }}
                         className="p-1.5 hover:bg-rose-950/20 text-zinc-400 hover:text-rose-400 rounded transition cursor-pointer"
                         title="Delete"
                       >
@@ -218,6 +312,7 @@ export const CategoryManager: React.FC<Props> = ({
           </table>
         )}
       </div>
+      <AdminTablePagination page={currentPage} totalRows={filtered.length} onPageChange={setPage} />
 
       {/* Add / Edit Category Modal */}
       {modalOpen && (

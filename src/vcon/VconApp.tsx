@@ -206,6 +206,28 @@ export const VconApp: React.FC = () => {
     return false;
   };
 
+  const handleBulkDeleteCategories = async (ids: string[]) => {
+    const results = await Promise.all(ids.map(async (id) => {
+      try {
+        const res = await fetch(`/api/vcon/categories/${id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data: any = await res.json();
+        return data.success === true;
+      } catch {
+        return false;
+      }
+    }));
+    const deletedCount = results.filter(Boolean).length;
+    if (deletedCount > 0) await fetchCategories();
+    showToast(
+      deletedCount === ids.length
+        ? `${deletedCount} categor${deletedCount === 1 ? 'y' : 'ies'} deleted`
+        : `${deletedCount} of ${ids.length} categories deleted; ${ids.length - deletedCount} failed`
+    );
+  };
+
   const handleBulkUpload = async (
     files: Array<{ title: string; slug?: string; category?: string; tags?: string[]; html_content: string }>
   ) => {
@@ -274,6 +296,31 @@ export const VconApp: React.FC = () => {
     } catch (err: any) {
       showToast(`Error: ${err?.message}`);
     }
+  };
+
+  const handleBulkDeleteTemplates = async (ids: string[]) => {
+    const results = await Promise.all(ids.map(async (id) => {
+      try {
+        const res = await fetch(`/api/vcon/templates/${id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data: any = await res.json();
+        return data.success === true;
+      } catch {
+        return false;
+      }
+    }));
+    const deletedCount = results.filter(Boolean).length;
+    if (deletedCount > 0) {
+      await fetchTemplates();
+      fetchStatus();
+    }
+    showToast(
+      deletedCount === ids.length
+        ? `${deletedCount} template${deletedCount === 1 ? '' : 's'} deleted`
+        : `${deletedCount} of ${ids.length} templates deleted; ${ids.length - deletedCount} failed`
+    );
   };
 
   const handleInitSchema = async (): Promise<{ success: boolean; message: string }> => {
@@ -423,6 +470,7 @@ export const VconApp: React.FC = () => {
               setActiveTab('add');
             }}
             onDelete={handleDeleteTemplate}
+            onBulkDelete={handleBulkDeleteTemplates}
             onPreview={(tmpl) => setPreviewTemplate(tmpl)}
             tursoConnected={systemStatus.turso.connected}
             onSeedDb={async () => {
@@ -440,6 +488,7 @@ export const VconApp: React.FC = () => {
             onSaveCategory={handleSaveCategory}
             onToggleStatus={handleToggleCategoryStatus}
             onDeleteCategory={handleDeleteCategory}
+            onBulkDelete={handleBulkDeleteCategories}
           />
         )}
 

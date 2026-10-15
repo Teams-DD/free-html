@@ -10,6 +10,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { HtmlTemplate } from '../../types.ts';
+import { AdminTablePagination } from '../components/AdminTablePagination.tsx';
 
 interface Props {
   templates: HtmlTemplate[];
@@ -18,6 +19,7 @@ interface Props {
   onAddNew: () => void;
   onEdit: (template: HtmlTemplate) => void;
   onDelete: (id: string) => void;
+  onBulkDelete: (ids: string[]) => Promise<void>;
   onPreview: (template: HtmlTemplate) => void;
   tursoConnected: boolean;
   onSeedDb: () => void;
@@ -30,10 +32,14 @@ export const TemplateManager: React.FC<Props> = ({
   onAddNew,
   onEdit,
   onDelete,
+  onBulkDelete,
   onPreview,
 }) => {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [page, setPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const categories = ['all', ...Array.from(new Set(templates.map((t) => t.category)))];
 
@@ -46,6 +52,24 @@ export const TemplateManager: React.FC<Props> = ({
       t.tags.some((tag) => tag.toLowerCase().includes(search.toLowerCase()));
     return matchesCat && matchesSearch;
   });
+  const pageCount = Math.max(1, Math.ceil(filtered.length / 20));
+  const currentPage = Math.min(page, pageCount);
+  const pageItems = filtered.slice((currentPage - 1) * 20, currentPage * 20);
+  const allFilteredSelected = filtered.length > 0 && filtered.every((item) => selectedIds.has(item.id));
+
+  const handleBulkDelete = async () => {
+    const ids = filtered.filter((item) => selectedIds.has(item.id)).map((item) => item.id);
+    if (ids.length === 0 || !window.confirm(`Delete ${ids.length} selected template(s) permanently?`)) return;
+
+    setBulkDeleting(true);
+    try {
+      await onBulkDelete(ids);
+      setSelectedIds(new Set());
+      setPage(1);
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
 
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-[#090a0c] text-xs overflow-hidden">
@@ -89,7 +113,11 @@ export const TemplateManager: React.FC<Props> = ({
             type="text"
             placeholder="Search templates..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setSelectedIds(new Set());
+              setPage(1);
+            }}
             className="w-full pl-8 pr-2.5 py-1 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-[#383b47]"
           />
         </div>
@@ -98,7 +126,11 @@ export const TemplateManager: React.FC<Props> = ({
           {categories.map((cat) => (
             <button
               key={cat}
-              onClick={() => setSelectedCategory(cat)}
+              onClick={() => {
+                setSelectedCategory(cat);
+                setSelectedIds(new Set());
+                setPage(1);
+              }}
               className={`px-2.5 py-1 rounded text-[10px] font-medium transition cursor-pointer ${
                 selectedCategory === cat
                   ? 'bg-[#181a22] text-zinc-100 border border-[#232634]'
@@ -111,6 +143,30 @@ export const TemplateManager: React.FC<Props> = ({
         </div>
       </div>
 
+      {selectedIds.size > 0 && (
+        <div className="px-4 py-2 flex items-center justify-between shrink-0 bg-[#111216] border-b border-[#1c1d22]">
+          <span className="text-[10px] text-zinc-400 font-mono">{selectedIds.size} selected</span>
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set())}
+              className="px-2 py-1 text-zinc-400 hover:text-zinc-200 rounded transition"
+            >
+              Clear selection
+            </button>
+            <button
+              type="button"
+              onClick={handleBulkDelete}
+              disabled={bulkDeleting}
+              className="px-2.5 py-1 bg-rose-950/30 hover:bg-rose-950/50 text-rose-300 border border-rose-900/40 rounded text-[10px] font-medium transition flex items-center space-x-1.5 disabled:opacity-50"
+            >
+              <Trash2 className="w-3 h-3" />
+              <span>{bulkDeleting ? 'Deleting...' : 'Delete selected'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Table Content */}
       <div className="flex-1 overflow-auto bg-[#090a0c]">
         {filtered.length === 0 ? (
@@ -122,6 +178,22 @@ export const TemplateManager: React.FC<Props> = ({
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-[#0f1013] border-b border-[#1c1d22] text-zinc-400 uppercase text-[9px] font-mono tracking-wider sticky top-0 z-10">
+                <th className="py-2.5 pl-4 pr-1">
+                  <input
+                    type="checkbox"
+                    checked={allFilteredSelected}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setSelectedIds((previous) => {
+                        const next = new Set(previous);
+                        filtered.forEach((item) => checked ? next.add(item.id) : next.delete(item.id));
+                        return next;
+                      });
+                    }}
+                    aria-label="Select all filtered templates"
+                    className="accent-zinc-400"
+                  />
+                </th>
                 <th className="py-2.5 px-4">Title & Slug</th>
                 <th className="py-2.5 px-4">Category</th>
                 <th className="py-2.5 px-4">Size</th>
@@ -131,8 +203,24 @@ export const TemplateManager: React.FC<Props> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1c1d22]">
-              {filtered.map((item) => (
+              {pageItems.map((item) => (
                 <tr key={item.id} className="hover:bg-[#121317] transition-colors">
+                  <td className="py-2 pl-4 pr-1">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(item.id)}
+                      onChange={(event) => {
+                        setSelectedIds((previous) => {
+                          const next = new Set(previous);
+                          if (event.target.checked) next.add(item.id);
+                          else next.delete(item.id);
+                          return next;
+                        });
+                      }}
+                      aria-label={`Select template ${item.title}`}
+                      className="accent-zinc-400"
+                    />
+                  </td>
                   <td className="py-2 px-4">
                     <span className="font-medium text-zinc-200 block text-[11px]">{item.title}</span>
                     <span className="text-[10px] text-zinc-500 font-mono">/{item.slug}</span>
@@ -177,7 +265,14 @@ export const TemplateManager: React.FC<Props> = ({
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        onClick={() => onDelete(item.id)}
+                        onClick={() => {
+                          onDelete(item.id);
+                          setSelectedIds((previous) => {
+                            const next = new Set(previous);
+                            next.delete(item.id);
+                            return next;
+                          });
+                        }}
                         className="p-1.5 text-zinc-400 hover:text-rose-400 hover:bg-rose-950/20 rounded transition cursor-pointer"
                         title="Delete"
                       >
@@ -191,6 +286,7 @@ export const TemplateManager: React.FC<Props> = ({
           </table>
         )}
       </div>
+      <AdminTablePagination page={currentPage} totalRows={filtered.length} onPageChange={setPage} />
     </div>
   );
 };

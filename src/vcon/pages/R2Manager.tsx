@@ -18,6 +18,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { SystemStatus } from '../../types.ts';
+import { AdminTablePagination } from '../components/AdminTablePagination.tsx';
 
 interface Props {
   status: SystemStatus['r2'];
@@ -66,6 +67,8 @@ export const R2Manager: React.FC<Props> = ({
   const [bucketFiles, setBucketFiles] = useState<R2BucketFile[] | null>(null);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [filePage, setFilePage] = useState(1);
+  const [selectedFileKeys, setSelectedFileKeys] = useState<Set<string>>(() => new Set());
 
   // Sync state if status changes from server
   useEffect(() => {
@@ -89,6 +92,8 @@ export const R2Manager: React.FC<Props> = ({
       const data: any = await res.json();
       if (data.success && Array.isArray(data.files)) {
         setBucketFiles(data.files);
+        setFilePage(1);
+        setSelectedFileKeys(new Set());
         addLog(`Successfully loaded ${data.files.length} file(s) from R2 bucket.`);
       } else {
         addLog(`Could not list R2 files: ${data.error || 'Check credentials'}`);
@@ -105,6 +110,20 @@ export const R2Manager: React.FC<Props> = ({
     navigator.clipboard.writeText(fullUrl);
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const handleCopySelectedUrls = async () => {
+    const selectedFiles = (bucketFiles || []).filter((file) => selectedFileKeys.has(file.key));
+    const urls = selectedFiles.map((file) =>
+      file.url.startsWith('/') ? `${window.location.origin}${file.url}` : file.url
+    );
+
+    try {
+      await navigator.clipboard.writeText(urls.join('\n'));
+      addLog(`Copied ${urls.length} selected file URL(s) to clipboard.`);
+    } catch (err: any) {
+      addLog(`Could not copy selected file URLs: ${err?.message || 'Clipboard unavailable'}`);
+    }
   };
 
   const handleTest = async () => {
@@ -226,6 +245,12 @@ export const R2Manager: React.FC<Props> = ({
   // 10 GB is Cloudflare R2 Free Tier monthly allowance
   const freeTierGB = 10;
   const usagePercentage = Math.min((stats.totalGigabytes / freeTierGB) * 100, 100);
+  const filePageCount = Math.max(1, Math.ceil((bucketFiles?.length || 0) / 20));
+  const currentFilePage = Math.min(filePage, filePageCount);
+  const pageBucketFiles = (bucketFiles || []).slice((currentFilePage - 1) * 20, currentFilePage * 20);
+  const allBucketFilesSelected = Boolean(
+    bucketFiles?.length && bucketFiles.every((file) => selectedFileKeys.has(file.key))
+  );
 
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-[#090a0c] text-xs overflow-hidden">
@@ -449,10 +474,48 @@ export const R2Manager: React.FC<Props> = ({
               </div>
             ) : (
               <div className="bg-[#0c0d10] border border-[#1f2026] rounded overflow-hidden">
+                {selectedFileKeys.size > 0 && (
+                  <div className="px-3 py-2 flex items-center justify-between bg-[#111216] border-b border-[#1f2026]">
+                    <span className="text-[10px] text-zinc-400 font-mono">{selectedFileKeys.size} selected</span>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedFileKeys(new Set())}
+                        className="px-2 py-1 text-zinc-400 hover:text-zinc-200 rounded transition"
+                      >
+                        Clear selection
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCopySelectedUrls}
+                        className="px-2.5 py-1 bg-[#181a22] hover:bg-[#20222d] text-zinc-300 border border-[#232634] rounded text-[10px] font-medium transition flex items-center space-x-1.5"
+                      >
+                        <Copy className="w-3 h-3" />
+                        <span>Copy selected URLs</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className="max-h-60 overflow-y-auto">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
                       <tr className="bg-[#14151b] border-b border-[#1f2026] text-zinc-500 uppercase text-[9px] font-mono tracking-wider sticky top-0">
+                        <th className="py-2 pl-3 pr-1">
+                          <input
+                            type="checkbox"
+                            checked={allBucketFilesSelected}
+                            onChange={(event) => {
+                              const checked = event.target.checked;
+                              setSelectedFileKeys((previous) => {
+                                const next = new Set(previous);
+                                (bucketFiles || []).forEach((file) => checked ? next.add(file.key) : next.delete(file.key));
+                                return next;
+                              });
+                            }}
+                            aria-label="Select all R2 files"
+                            className="accent-zinc-400"
+                          />
+                        </th>
                         <th className="py-2 px-3">File Key</th>
                         <th className="py-2 px-3">Size</th>
                         <th className="py-2 px-3">Access Delivery URL</th>
@@ -460,8 +523,25 @@ export const R2Manager: React.FC<Props> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#181920]">
-                      {bucketFiles.map((file) => (
+                      {pageBucketFiles.map((file) => (
                         <tr key={file.key} className="hover:bg-[#121318] transition-colors">
+                          <td className="py-2 pl-3 pr-1">
+                            <input
+                              type="checkbox"
+                              checked={selectedFileKeys.has(file.key)}
+                              onChange={(event) => {
+                                const checked = event.target.checked;
+                                setSelectedFileKeys((previous) => {
+                                  const next = new Set(previous);
+                                  if (checked) next.add(file.key);
+                                  else next.delete(file.key);
+                                  return next;
+                                });
+                              }}
+                              aria-label={`Select R2 file ${file.key}`}
+                              className="accent-zinc-400"
+                            />
+                          </td>
                           <td className="py-2 px-3 font-mono text-[11px] text-zinc-200">
                             <div className="flex items-center space-x-1.5">
                               <FileText className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
@@ -505,6 +585,11 @@ export const R2Manager: React.FC<Props> = ({
                     </tbody>
                   </table>
                 </div>
+                <AdminTablePagination
+                  page={currentFilePage}
+                  totalRows={bucketFiles.length}
+                  onPageChange={setFilePage}
+                />
               </div>
             )}
           </div>
