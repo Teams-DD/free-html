@@ -379,10 +379,18 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
         return json(res);
       }
       if (!r2Client) {
-        return json({ success: false, error: 'Cloudflare R2 credentials (Account ID, Keys) are missing.' }, 400);
+        return json({
+          success: false,
+          error: 'Cloudflare R2 credentials (Account ID, Keys) are missing.',
+          message: 'Cloudflare R2 credentials (Account ID, Keys) are missing.',
+        }, 400);
       }
       const res = await testR2Connection(r2Client, r2Bucket);
-      return json(res);
+      return json({
+        success: res.success,
+        message: res.message,
+        error: res.success ? undefined : res.message,
+      });
     }
 
     // POST /api/vcon/r2-config - Save R2 credentials into Turso database settings

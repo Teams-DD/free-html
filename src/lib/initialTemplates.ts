@@ -9,11 +9,11 @@ export interface SeedTemplate {
 
 export const INITIAL_SEEDS: SeedTemplate[] = [
   {
-    id: 'neon-button',
+    id: 'minimal-button',
     title: 'Minimal Dark Button',
     slug: 'minimal-dark-button',
     category: 'Buttons',
-    tags: ['Button', 'Minimal', 'Smooth', 'Tailwind'],
+    tags: ['Button', 'Minimal', 'Soft', 'Tailwind'],
     html_content: `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -23,7 +23,7 @@ export const INITIAL_SEEDS: SeedTemplate[] = [
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="flex items-center justify-center min-h-screen bg-zinc-950 p-4">
-  <button class="relative px-4 py-2 bg-zinc-850 hover:bg-zinc-800 text-zinc-200 text-xs font-medium rounded-md border border-zinc-700/70 shadow-xs hover:border-zinc-600 active:scale-95 transition-all duration-150 cursor-pointer">
+  <button class="px-3.5 py-1.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-200 text-xs font-medium rounded transition-colors cursor-pointer shadow-none border-0">
     Explore Components
   </button>
 </body>
@@ -44,10 +44,10 @@ export const INITIAL_SEEDS: SeedTemplate[] = [
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="flex items-center justify-center min-h-screen bg-zinc-950 p-4">
-  <div class="flex items-center space-x-2 bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-800 shadow-sm">
+  <div class="flex items-center space-x-2 bg-zinc-900 px-3 py-1.5 rounded border border-zinc-800 shadow-none">
     <span class="text-xs font-medium text-zinc-300">Notifications</span>
-    <span id="count" class="bg-indigo-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">3</span>
-    <button onclick="let c=document.getElementById('count');c.innerText=parseInt(c.innerText)+1" class="ml-1 w-5 h-5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded text-xs font-bold flex items-center justify-center transition cursor-pointer">+</button>
+    <span id="count" class="bg-zinc-800 text-zinc-200 text-[10px] font-medium px-1.5 py-0.5 rounded shadow-none border-0">3</span>
+    <button onclick="let c=document.getElementById('count');c.innerText=parseInt(c.innerText)+1" class="w-5 h-5 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 rounded text-xs font-medium flex items-center justify-center transition-colors cursor-pointer shadow-none border-0">+</button>
   </div>
 </body>
 </html>`
@@ -67,9 +67,9 @@ export const INITIAL_SEEDS: SeedTemplate[] = [
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="flex items-center justify-center min-h-screen bg-zinc-950 p-4">
-  <label class="relative inline-flex items-center cursor-pointer">
+  <label class="relative inline-flex items-center cursor-pointer shadow-none">
     <input type="checkbox" class="sr-only peer" checked>
-    <div class="w-9 h-5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600 border border-zinc-700"></div>
+    <div class="w-8 h-4.5 bg-zinc-800 peer-focus:outline-none rounded-sm peer peer-checked:after:translate-x-3.5 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-300 after:rounded-xs after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-zinc-650 shadow-none border-0"></div>
   </label>
 </body>
 </html>`
@@ -89,7 +89,7 @@ export const INITIAL_SEEDS: SeedTemplate[] = [
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="flex items-center justify-center min-h-screen bg-zinc-950 p-4">
-  <div class="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+  <div class="w-5 h-5 border-2 border-zinc-500 border-t-transparent rounded-full animate-spin shadow-none"></div>
 </body>
 </html>`
   },
@@ -108,7 +108,7 @@ export const INITIAL_SEEDS: SeedTemplate[] = [
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="flex items-center justify-center min-h-screen bg-zinc-950 p-4">
-  <div class="flex items-center space-x-1.5 bg-amber-950/40 border border-amber-800/60 px-2.5 py-1 rounded text-amber-300 text-xs font-medium">
+  <div class="flex items-center space-x-1.5 bg-amber-950/25 border border-amber-800/40 px-2.5 py-1 rounded text-amber-300 text-xs font-medium shadow-none">
     <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
     <span>Update Available</span>
   </div>
@@ -130,12 +130,12 @@ export const INITIAL_SEEDS: SeedTemplate[] = [
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="flex items-center justify-center min-h-screen bg-zinc-950 p-4">
-  <div class="w-64 bg-zinc-900 border border-zinc-800 rounded-lg p-3.5 shadow-sm">
+  <div class="w-64 bg-zinc-900 border border-zinc-800 rounded p-3.5 shadow-none">
     <div class="flex items-center justify-between text-zinc-400 text-xs font-medium mb-1.5">
       <span>Daily API Calls</span>
-      <span class="text-emerald-400 text-[11px] font-semibold">+18.2%</span>
+      <span class="text-zinc-300 text-[11px] font-medium">+18.2%</span>
     </div>
-    <div class="text-xl font-bold text-zinc-100 tracking-tight">142,890</div>
+    <div class="text-lg font-semibold text-zinc-200 tracking-tight">142,890</div>
     <div class="mt-2 text-[11px] text-zinc-500 font-normal">Updated 2 minutes ago</div>
   </div>
 </body>
@@ -156,12 +156,12 @@ export const INITIAL_SEEDS: SeedTemplate[] = [
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="flex items-center justify-center min-h-screen bg-zinc-950 p-4">
-  <div class="w-full max-w-xs bg-zinc-900 border border-zinc-800 rounded-lg p-4 shadow-xl">
-    <h3 class="text-xs font-bold text-zinc-100 mb-1">Confirm Deployment</h3>
+  <div class="w-full max-w-xs bg-zinc-900 border border-zinc-800 rounded p-4 shadow-none">
+    <h3 class="text-xs font-semibold text-zinc-200 mb-1">Confirm Deployment</h3>
     <p class="text-[11px] text-zinc-400 mb-4">Deploy changes to production Cloudflare edge nodes?</p>
     <div class="flex items-center justify-end space-x-2">
-      <button class="px-2.5 py-1 text-[11px] text-zinc-400 hover:text-zinc-200 rounded transition cursor-pointer">Cancel</button>
-      <button class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-medium rounded transition cursor-pointer">Deploy</button>
+      <button class="px-2.5 py-1 text-[11px] text-zinc-400 hover:text-zinc-200 rounded transition cursor-pointer shadow-none border-0">Cancel</button>
+      <button class="px-3 py-1 bg-zinc-800 hover:bg-zinc-750 text-zinc-200 text-[11px] font-medium rounded transition cursor-pointer shadow-none border-0">Deploy</button>
     </div>
   </div>
 </body>
@@ -182,10 +182,10 @@ export const INITIAL_SEEDS: SeedTemplate[] = [
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="flex items-center justify-center min-h-screen bg-zinc-950 p-4">
-  <div class="flex items-center bg-zinc-900 border border-zinc-800 p-1 rounded-lg space-x-1">
-    <button class="px-3 py-1 bg-zinc-800 text-white text-xs font-medium rounded shadow-xs cursor-pointer">Overview</button>
-    <button class="px-3 py-1 text-zinc-400 hover:text-zinc-200 text-xs font-medium rounded transition cursor-pointer">Logs</button>
-    <button class="px-3 py-1 text-zinc-400 hover:text-zinc-200 text-xs font-medium rounded transition cursor-pointer">Settings</button>
+  <div class="flex items-center bg-zinc-900 border border-zinc-800 p-1 rounded space-x-1 shadow-none">
+    <button class="px-3 py-1 bg-zinc-800 text-zinc-200 text-xs font-medium rounded cursor-pointer shadow-none border-0">Overview</button>
+    <button class="px-3 py-1 text-zinc-400 hover:text-zinc-200 text-xs font-medium rounded transition cursor-pointer shadow-none border-0">Logs</button>
+    <button class="px-3 py-1 text-zinc-400 hover:text-zinc-200 text-xs font-medium rounded transition cursor-pointer shadow-none border-0">Settings</button>
   </div>
 </body>
 </html>`

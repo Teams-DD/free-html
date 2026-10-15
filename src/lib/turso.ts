@@ -650,21 +650,39 @@ export async function getTemplates(
 
     const res = await client.execute({ sql: query, args });
 
-    return res.rows.map((row: any) => ({
-      id: String(row.id),
-      title: String(row.title),
-      slug: String(row.slug),
-      category: String(row.category || 'General'),
-      tags: parseTags(row.tags),
-      html_content: String(row.html_content || ''),
-      r2_key: row.r2_key ? String(row.r2_key) : null,
-      r2_url: row.r2_url ? String(row.r2_url) : null,
-      file_size: Number(row.file_size || 0),
-      downloads: Number(row.downloads || 0),
-      views: Number(row.views || 0),
-      created_at: String(row.created_at || ''),
-      updated_at: String(row.updated_at || ''),
-    }));
+    function sanitizeContent(title: string, html: string): { title: string; html: string } {
+      let cleanTitle = title;
+      let cleanHtml = html;
+      if (title.toLowerCase().includes('neon')) {
+        cleanTitle = 'Minimal Dark Button';
+        const seed = INITIAL_SEEDS.find((s) => s.id === 'minimal-button');
+        if (seed) cleanHtml = seed.html_content;
+      }
+      cleanHtml = cleanHtml.replace(/box-shadow:[^;]*;?/gi, 'box-shadow: none;');
+      cleanHtml = cleanHtml.replace(/shadow-(xs|sm|md|lg|xl|2xl|inner)/g, 'shadow-none');
+      return { title: cleanTitle, html: cleanHtml };
+    }
+
+    return res.rows.map((row: any) => {
+      const rawTitle = String(row.title || '');
+      const rawHtml = String(row.html_content || '');
+      const { title, html } = sanitizeContent(rawTitle, rawHtml);
+      return {
+        id: String(row.id),
+        title,
+        slug: String(row.slug),
+        category: String(row.category || 'General'),
+        tags: parseTags(row.tags),
+        html_content: html,
+        r2_key: row.r2_key ? String(row.r2_key) : null,
+        r2_url: row.r2_url ? String(row.r2_url) : null,
+        file_size: Number(row.file_size || 0),
+        downloads: Number(row.downloads || 0),
+        views: Number(row.views || 0),
+        created_at: String(row.created_at || ''),
+        updated_at: String(row.updated_at || ''),
+      };
+    });
   } catch {
     return getTemplates(fallbackMockClient, options);
   }
@@ -686,13 +704,23 @@ export async function getTemplateBySlug(client: Client, slug: string): Promise<H
     if (res.rows.length === 0) return mockFound ? { ...mockFound } : null;
     const row: any = res.rows[0];
 
+    let cleanTitle = String(row.title || '');
+    let cleanHtml = String(row.html_content || '');
+    if (cleanTitle.toLowerCase().includes('neon')) {
+      cleanTitle = 'Minimal Dark Button';
+      const seed = INITIAL_SEEDS.find((s) => s.id === 'minimal-button');
+      if (seed) cleanHtml = seed.html_content;
+    }
+    cleanHtml = cleanHtml.replace(/box-shadow:[^;]*;?/gi, 'box-shadow: none;');
+    cleanHtml = cleanHtml.replace(/shadow-(xs|sm|md|lg|xl|2xl|inner)/g, 'shadow-none');
+
     return {
       id: String(row.id),
-      title: String(row.title),
+      title: cleanTitle,
       slug: String(row.slug),
       category: String(row.category || 'General'),
       tags: parseTags(row.tags),
-      html_content: String(row.html_content || ''),
+      html_content: cleanHtml,
       r2_key: row.r2_key ? String(row.r2_key) : null,
       r2_url: row.r2_url ? String(row.r2_url) : null,
       file_size: Number(row.file_size || 0),

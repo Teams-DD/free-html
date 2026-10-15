@@ -2,6 +2,16 @@ import express from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { DOMParser, Node } from '@xmldom/xmldom';
+
+// Ensure DOMParser and Node exist in global scope for AWS SDK S3 XML deserialization in Node.js
+if (typeof (globalThis as any).DOMParser === 'undefined') {
+  (globalThis as any).DOMParser = DOMParser;
+}
+if (typeof (globalThis as any).Node === 'undefined') {
+  (globalThis as any).Node = Node;
+}
+
 import { createServer as createViteServer } from 'vite';
 import { handleApiRequest } from './src/lib/apiHandler.ts';
 
@@ -12,7 +22,10 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = Number(process.env.PORT) || 3000;
+
+  const portArgIndex = process.argv.indexOf('--port');
+  const cliPort = portArgIndex !== -1 && process.argv[portArgIndex + 1] ? Number(process.argv[portArgIndex + 1]) : NaN;
+  const PORT = (!isNaN(cliPort) && cliPort > 0) ? cliPort : (Number(process.env.PORT) || 3000);
 
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -28,22 +41,34 @@ async function startServer() {
       for (const [key, value] of Object.entries(req.headers)) {
         if (value && typeof value === 'string') {
           headers.set(key, value);
+        } else if (Array.isArray(value)) {
+          headers.set(key, value.join(', '));
         }
       }
 
       let body: string | undefined = undefined;
-      if (['POST', 'PUT', 'PATCH'].includes(req.method.toUpperCase())) {
-        body = JSON.stringify(req.body);
+      const upperMethod = req.method.toUpperCase();
+      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(upperMethod)) {
+        if (typeof req.body === 'string') {
+          body = req.body;
+        } else if (req.body !== undefined && req.body !== null) {
+          body = JSON.stringify(req.body);
+        }
         if (!headers.get('content-type')) {
           headers.set('content-type', 'application/json');
         }
       }
 
-      const webRequest = new Request(fullUrl, {
+      const requestInit: RequestInit = {
         method: req.method,
         headers,
-        body,
-      });
+      };
+
+      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(upperMethod) && body !== undefined) {
+        requestInit.body = body;
+      }
+
+      const webRequest = new Request(fullUrl, requestInit);
 
       const webResponse = await handleApiRequest(webRequest);
 
@@ -81,7 +106,16 @@ async function startServer() {
   });
 }
 
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
+});
+
 startServer().catch((err) => {
   console.error('Failed to start server:', err);
   process.exit(1);
 });
+

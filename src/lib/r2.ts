@@ -1,10 +1,20 @@
+import { DOMParser, Node } from '@xmldom/xmldom';
+
+// Ensure DOMParser and Node are available globally in all Node environments for AWS SDK XML parsing
+if (typeof (globalThis as any).DOMParser === 'undefined') {
+  (globalThis as any).DOMParser = DOMParser;
+}
+if (typeof (globalThis as any).Node === 'undefined') {
+  (globalThis as any).Node = Node;
+}
+
 import {
   S3Client,
   PutObjectCommand,
   DeleteObjectCommand,
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
-import { R2Config } from '../types.ts';
+import type { R2Config } from '../types.ts';
 
 let cachedS3Client: S3Client | null = null;
 let cachedKey = '';
@@ -122,9 +132,15 @@ export async function testR2Connection(
       message: `Successfully connected to Cloudflare R2 bucket: "${bucketName}".`,
     };
   } catch (err: any) {
+    let msg = err?.message || 'Failed to verify Cloudflare R2 bucket access.';
+    if (err?.name && err.name !== 'Error' && !msg.includes(err.name)) {
+      msg = `${err.name}: ${msg}`;
+    }
+    // Remove internal AWS SDK hint suffix if present
+    msg = msg.replace(/\n\s*Deserialization error:.*/gi, '').trim();
     return {
       success: false,
-      message: err?.message || 'Failed to verify Cloudflare R2 bucket access.',
+      message: msg,
     };
   }
 }

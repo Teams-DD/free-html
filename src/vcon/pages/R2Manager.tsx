@@ -74,11 +74,12 @@ export const R2Manager: React.FC<Props> = ({
     addLog('Testing Cloudflare R2 bucket connection and credentials...');
     try {
       const res = await onTestConnection();
-      addLog(res.message);
+      const msg = res.message || (res as any).error || (res.success ? 'Connected successfully.' : 'Connection failed.');
+      addLog(msg);
       if (res.success) {
-        setFeedback({ type: 'success', text: res.message });
+        setFeedback({ type: 'success', text: msg });
       } else {
-        setFeedback({ type: 'error', text: res.message });
+        setFeedback({ type: 'error', text: msg });
       }
     } catch (err: any) {
       const msg = err?.message || 'Failed to query Cloudflare R2';
@@ -115,16 +116,18 @@ export const R2Manager: React.FC<Props> = ({
       });
 
       if (res.success) {
-        addLog(res.message || 'Cloudflare R2 credentials successfully saved to database.');
+        const msg = res.message || 'Cloudflare R2 credentials successfully saved to database.';
+        addLog(msg);
         setFeedback({
           type: 'success',
-          text: res.message || 'Credentials verified & saved to database successfully.',
+          text: msg,
         });
         setSecretAccessKey('');
         onRefresh();
       } else {
-        addLog(`Save failed: ${res.error}`);
-        setFeedback({ type: 'error', text: res.error || 'Failed to save credentials' });
+        const errText = res.error || res.message || 'Failed to save credentials';
+        addLog(`Save failed: ${errText}`);
+        setFeedback({ type: 'error', text: errText });
       }
     } catch (err: any) {
       const msg = err?.message || 'Save error';
