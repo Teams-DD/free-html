@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { SystemStatus } from '../../types.ts';
 import { AdminTablePagination } from '../components/AdminTablePagination.tsx';
+import { useAdminConfirmation } from '../components/AdminConfirmation.tsx';
 
 interface Props {
   status: SystemStatus['r2'];
@@ -48,6 +49,7 @@ export const R2Manager: React.FC<Props> = ({
   onSaveR2Config,
   onDeleteR2Config,
 }) => {
+  const requestConfirmation = useAdminConfirmation();
   const [accountId, setAccountId] = useState(status.accountId || '');
   const [accessKeyId, setAccessKeyId] = useState(status.accessKeyId || '');
   const [secretAccessKey, setSecretAccessKey] = useState('');
@@ -207,9 +209,12 @@ export const R2Manager: React.FC<Props> = ({
   };
 
   const handleDelete = async () => {
-    if (!window.confirm('Are you sure you want to remove the R2 configuration from the database?')) {
-      return;
-    }
+    const confirmed = await requestConfirmation({
+      title: 'Remove R2 configuration?',
+      message: 'This will remove the saved R2 configuration from the database.',
+      confirmLabel: 'Remove configuration',
+    });
+    if (!confirmed) return;
 
     setActionLoading(true);
     addLog('Removing R2 configuration from database...');

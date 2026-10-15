@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Category } from '../../types.ts';
 import { AdminTablePagination } from '../components/AdminTablePagination.tsx';
+import { useAdminConfirmation } from '../components/AdminConfirmation.tsx';
 
 interface Props {
   categories: Category[];
@@ -33,6 +34,7 @@ export const CategoryManager: React.FC<Props> = ({
   onDeleteCategory,
   onBulkDelete,
 }) => {
+  const requestConfirmation = useAdminConfirmation();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
@@ -108,7 +110,13 @@ export const CategoryManager: React.FC<Props> = ({
 
   const handleBulkDelete = async () => {
     const ids = filtered.filter((category) => selectedIds.has(category.id)).map((category) => category.id);
-    if (ids.length === 0 || !window.confirm(`Delete ${ids.length} selected categor${ids.length === 1 ? 'y' : 'ies'}?`)) return;
+    if (ids.length === 0) return;
+    const confirmed = await requestConfirmation({
+      title: 'Delete selected categories?',
+      message: `Delete ${ids.length} selected categor${ids.length === 1 ? 'y' : 'ies'}?`,
+      confirmLabel: 'Delete categories',
+    });
+    if (!confirmed) return;
 
     setBulkDeleting(true);
     try {

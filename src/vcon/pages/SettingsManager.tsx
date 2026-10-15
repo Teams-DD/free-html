@@ -14,6 +14,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { AdminUser } from '../../types.ts';
+import { useAdminConfirmation } from '../components/AdminConfirmation.tsx';
 
 interface Props {
   token: string | null;
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export const SettingsManager: React.FC<Props> = ({ token }) => {
+  const requestConfirmation = useAdminConfirmation();
   const [activeSubTab, setActiveSubTab] = useState<'branding' | 'admins'>('branding');
 
   // Site Branding State
@@ -297,7 +299,12 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
       setAdminFeedback({ type: 'error', text: 'Cannot delete the only admin user.' });
       return;
     }
-    if (!window.confirm(`Delete admin user "${user.username}"?`)) return;
+    const confirmed = await requestConfirmation({
+      title: 'Delete admin user?',
+      message: `Delete admin user "${user.username}"?`,
+      confirmLabel: 'Delete user',
+    });
+    if (!confirmed) return;
 
     try {
       const res = await fetch(`/api/vcon/admin-users/${user.id}`, {

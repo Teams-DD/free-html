@@ -9,10 +9,18 @@ import { TursoManager } from './pages/TursoManager.tsx';
 import { R2Manager } from './pages/R2Manager.tsx';
 import { SettingsManager } from './pages/SettingsManager.tsx';
 import { DeploymentDocs } from './pages/DeploymentDocs.tsx';
+import { AdminConfirmationProvider, useAdminConfirmation } from './components/AdminConfirmation.tsx';
 import { HtmlTemplate, Category, SystemStatus } from '../types.ts';
 import { X } from 'lucide-react';
 
-export const VconApp: React.FC = () => {
+export const VconApp: React.FC = () => (
+  <AdminConfirmationProvider>
+    <VconAppContent />
+  </AdminConfirmationProvider>
+);
+
+const VconAppContent: React.FC = () => {
+  const requestConfirmation = useAdminConfirmation();
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('vcon_admin_token'));
   const [verifying, setVerifying] = useState(true);
   const [activeTab, setActiveTab] = useState<VconTab>('templates');
@@ -192,7 +200,12 @@ export const VconApp: React.FC = () => {
   };
 
   const handleDeleteCategory = async (id: string) => {
-    if (!window.confirm('Delete this category?')) return false;
+    const confirmed = await requestConfirmation({
+      title: 'Delete category?',
+      message: 'This category will be permanently deleted.',
+      confirmLabel: 'Delete category',
+    });
+    if (!confirmed) return false;
     const res = await fetch(`/api/vcon/categories/${id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
@@ -279,7 +292,12 @@ export const VconApp: React.FC = () => {
   };
 
   const handleDeleteTemplate = async (id: string) => {
-    if (!window.confirm('Delete this template permanently from Turso & R2?')) return;
+    const confirmed = await requestConfirmation({
+      title: 'Delete template?',
+      message: 'This template will be permanently deleted from Turso and R2.',
+      confirmLabel: 'Delete template',
+    });
+    if (!confirmed) return;
 
     try {
       const res = await fetch(`/api/vcon/templates/${id}`, {

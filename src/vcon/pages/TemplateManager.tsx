@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { HtmlTemplate } from '../../types.ts';
 import { AdminTablePagination } from '../components/AdminTablePagination.tsx';
+import { useAdminConfirmation } from '../components/AdminConfirmation.tsx';
 
 interface Props {
   templates: HtmlTemplate[];
@@ -35,6 +36,7 @@ export const TemplateManager: React.FC<Props> = ({
   onBulkDelete,
   onPreview,
 }) => {
+  const requestConfirmation = useAdminConfirmation();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [page, setPage] = useState(1);
@@ -59,7 +61,13 @@ export const TemplateManager: React.FC<Props> = ({
 
   const handleBulkDelete = async () => {
     const ids = filtered.filter((item) => selectedIds.has(item.id)).map((item) => item.id);
-    if (ids.length === 0 || !window.confirm(`Delete ${ids.length} selected template(s) permanently?`)) return;
+    if (ids.length === 0) return;
+    const confirmed = await requestConfirmation({
+      title: 'Delete selected templates?',
+      message: `Delete ${ids.length} selected template(s) permanently?`,
+      confirmLabel: 'Delete templates',
+    });
+    if (!confirmed) return;
 
     setBulkDeleting(true);
     try {
