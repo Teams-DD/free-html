@@ -1,0 +1,9 @@
+name = "html-snippets"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "dist"
+
+# Optional Cloudflare R2 Bucket Binding (if binding directly in Pages)
+# [[r2_buckets]]
+# binding = "BUCKET"
+# bucket_name = "html-templates"

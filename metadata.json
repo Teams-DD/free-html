@@ -1,0 +1,6 @@
+{
+  "name": "HTML Snippets & Templates",
+  "description": "High performance free HTML snippets showcase with Turso SQLite database, Cloudflare R2 storage, and isolated admin dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
