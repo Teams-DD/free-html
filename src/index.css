@@ -1,8 +1,12 @@
 @import "tailwindcss";
 
+:root {
+  color-scheme: dark;
+}
+
 @layer base {
   *, ::before, ::after {
-    border-color: #27272a;
+    border-color: #22242b;
     box-shadow: none !important;
   }
 
@@ -18,6 +22,17 @@
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background-color: #090a0c;
     color: #9ca3af;
+  }
+
+  input, select, textarea {
+    color-scheme: dark;
+    background-color: #0c0d10;
+    color: #e4e4e7;
+  }
+
+  option {
+    background-color: #121317;
+    color: #e4e4e7;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -40,9 +55,9 @@
   background: #090a0c;
 }
 ::-webkit-scrollbar-thumb {
-  background: #27272a;
+  background: #1f2026;
   border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #3f3f46;
+  background: #2e303a;
 }

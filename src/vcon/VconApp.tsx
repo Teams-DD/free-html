@@ -10,7 +10,7 @@ import { R2Manager } from './pages/R2Manager.tsx';
 import { SettingsManager } from './pages/SettingsManager.tsx';
 import { DeploymentDocs } from './pages/DeploymentDocs.tsx';
 import { HtmlTemplate, Category, SystemStatus } from '../types.ts';
-import { X, Download, Copy, Check, Eye } from 'lucide-react';
+import { X } from 'lucide-react';
 
 export const VconApp: React.FC = () => {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('vcon_admin_token'));
@@ -361,7 +361,7 @@ export const VconApp: React.FC = () => {
 
   if (verifying) {
     return (
-      <div className="min-h-screen w-full bg-zinc-950 flex items-center justify-center text-xs text-zinc-500 font-mono">
+      <div className="min-h-screen w-full bg-[#090a0c] flex items-center justify-center text-xs text-zinc-500 font-mono">
         Verifying admin session...
       </div>
     );
@@ -391,7 +391,7 @@ export const VconApp: React.FC = () => {
   }
 
   return (
-    <div className="h-screen w-full bg-zinc-950 flex overflow-hidden antialiased">
+    <div className="h-screen w-full bg-[#090a0c] text-zinc-300 flex overflow-hidden antialiased">
       {/* Sidebar */}
       <VconSidebar
         activeTab={activeTab}
@@ -405,7 +405,7 @@ export const VconApp: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#090a0c]">
         {activeTab === 'templates' && (
           <TemplateManager
             templates={templates}
@@ -495,33 +495,33 @@ export const VconApp: React.FC = () => {
 
       {/* Admin Quick Preview Modal */}
       {previewTemplate && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-lg shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden">
-            <div className="h-10 px-3 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-[#121317] border border-[#22242b] rounded-lg w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden">
+            <div className="h-11 px-4 bg-[#0f1013] border-b border-[#1c1d22] flex items-center justify-between">
               <span className="font-semibold text-zinc-200 text-xs truncate">
                 {previewTemplate.title}
               </span>
               <button
                 onClick={() => setPreviewTemplate(null)}
-                className="w-6 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 transition cursor-pointer"
+                className="w-7 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-200 hover:bg-[#1a1b22] transition cursor-pointer"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="flex-1 bg-zinc-950 relative border-t border-zinc-850">
+            <div className="flex-1 bg-[#0b0c0e] relative">
               <iframe
                 title="Preview"
                 srcDoc={previewTemplate.html_content}
-                className="w-full h-full border-0"
+                className="w-full h-full border-0 bg-[#0b0c0e]"
               />
             </div>
           </div>
         </div>
       )}
 
-      {/* Toast */}
+      {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-3 right-3 bg-zinc-900 border border-zinc-800 text-zinc-300 text-[11px] px-3 py-1.5 rounded shadow-xl z-50 font-medium">
+        <div className="fixed bottom-3 right-3 bg-[#121317] border border-[#22242b] text-zinc-200 text-[11px] px-3.5 py-2 rounded font-medium z-50">
           {toastMessage}
         </div>
       )}

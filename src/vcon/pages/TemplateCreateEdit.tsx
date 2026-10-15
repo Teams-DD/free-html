@@ -3,8 +3,6 @@ import {
   ArrowLeft,
   Save,
   Upload,
-  Code2,
-  Eye,
   Check,
   AlertCircle,
   Files,
@@ -49,8 +47,8 @@ const DEFAULT_HTML = `<!DOCTYPE html>
   <title>Component</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="flex items-center justify-center min-h-screen bg-zinc-950 p-4">
-  <div class="p-4 bg-zinc-900 border border-zinc-800 rounded-lg text-white text-xs">
+<body class="flex items-center justify-center min-h-screen bg-[#090a0c] text-zinc-300 p-4">
+  <div class="p-4 bg-[#121317] border border-[#22242b] rounded-md text-xs">
     HTML Component
   </div>
 </body>
@@ -62,7 +60,6 @@ export const TemplateCreateEdit: React.FC<Props> = ({
   onSave,
   onBulkUpload,
   onCancel,
-  r2Connected,
 }) => {
   const [mode, setMode] = useState<'single' | 'bulk'>('single');
 
@@ -101,102 +98,91 @@ export const TemplateCreateEdit: React.FC<Props> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '');
-    if (!title) {
-      setTitle(nameWithoutExt);
-      setSlug(nameWithoutExt.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''));
-    }
-
     const reader = new FileReader();
     reader.onload = (event) => {
-      const text = event.target?.result as string;
-      if (text) setHtmlContent(text);
+      const content = event.target?.result as string;
+      if (content) {
+        setHtmlContent(content);
+        if (!title) {
+          const autoTitle = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]+/g, ' ');
+          const capTitle = autoTitle.charAt(0).toUpperCase() + autoTitle.slice(1);
+          setTitle(capTitle);
+          setSlug(autoTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''));
+        }
+      }
     };
     reader.readAsText(file);
+    e.target.value = '';
   };
 
-  // Multiple files selection
-  const handleBulkFilesSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  const handleBulkFilesSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
 
-    const newQueue: QueuedFile[] = [];
-    let readCount = 0;
-
-    Array.from(files).forEach((file) => {
-      const reader = new FileReader();
+    const newItems: QueuedFile[] = [];
+    for (const file of files) {
+      const text = await file.text();
       const rawName = file.name.replace(/\.[^/.]+$/, '');
-      const cleanSlug = rawName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      const itemTitle = rawName
+        .split(/[-_]+/)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+      const itemSlug = rawName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
-      reader.onload = (event) => {
-        const content = event.target?.result as string;
-        if (content) {
-          newQueue.push({
-            name: file.name,
-            title: rawName,
-            slug: cleanSlug,
-            category: bulkCategory,
-            size: file.size,
-            content,
-            status: 'pending',
-          });
-        }
-        readCount++;
-        if (readCount === files.length) {
-          setBulkQueue((prev) => [...prev, ...newQueue]);
-        }
-      };
-      reader.readAsText(file);
-    });
-
-    if (e.target) e.target.value = '';
-  };
-
-  const handleBulkUploadSubmit = async () => {
-    if (bulkQueue.length === 0 || !onBulkUpload) return;
-    setBulkUploading(true);
-    setBulkMessage(null);
-
-    const payload = bulkQueue.map((item) => ({
-      title: item.title,
-      slug: item.slug,
-      category: item.category || bulkCategory,
-      tags: [item.category || bulkCategory],
-      html_content: item.content,
-    }));
-
-    try {
-      const res = await onBulkUpload(payload);
-      if (res.success) {
-        setBulkMessage(`Successfully uploaded ${res.uploaded} HTML templates.`);
-        setBulkQueue((prev) => prev.map((f) => ({ ...f, status: 'success' })));
-        setTimeout(() => {
-          onCancel();
-        }, 1500);
-      } else {
-        setBulkMessage(`Upload error: ${res.error || 'Failed to upload'}`);
-      }
-    } catch (err: any) {
-      setBulkMessage(`Error: ${err?.message}`);
-    } finally {
-      setBulkUploading(false);
+      newItems.push({
+        name: file.name,
+        title: itemTitle,
+        slug: itemSlug,
+        category: bulkCategory,
+        size: file.size,
+        content: text,
+        status: 'pending',
+      });
     }
+
+    setBulkQueue((prev) => [...prev, ...newItems]);
+    e.target.value = '';
   };
 
   const removeBulkItem = (index: number) => {
     setBulkQueue((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handleBulkUploadSubmit = async () => {
+    if (bulkQueue.length === 0) return;
+    setBulkUploading(true);
+    setBulkMessage(null);
+
+    if (onBulkUpload) {
+      const filesPayload = bulkQueue.map((f) => ({
+        title: f.title,
+        slug: f.slug,
+        category: f.category || bulkCategory,
+        tags: [f.category || bulkCategory, 'HTML'],
+        html_content: f.content,
+      }));
+
+      const res = await onBulkUpload(filesPayload);
+      if (res.success) {
+        setBulkMessage(`Successfully uploaded ${res.uploaded} templates`);
+        setBulkQueue([]);
+      } else {
+        setBulkMessage(`Upload error: ${res.error}`);
+      }
+    }
+    setBulkUploading(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-
-    if (!title.trim() || !slug.trim() || !htmlContent.trim()) {
-      setError('Title, slug, and HTML content are required');
+    if (!title.trim() || !slug.trim()) {
+      setError('Title and Slug are required');
       return;
     }
 
     setSaving(true);
+    setError(null);
+
     try {
       const tags = tagsInput
         .split(',')
@@ -223,28 +209,28 @@ export const TemplateCreateEdit: React.FC<Props> = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-zinc-900 text-xs overflow-hidden">
-      {/* Header Bar */}
-      <div className="px-3 py-2 border-b border-zinc-800 bg-zinc-950 flex items-center justify-between shrink-0">
-        <div className="flex items-center space-x-2">
+    <div className="flex-1 flex flex-col min-w-0 bg-[#090a0c] text-xs overflow-hidden">
+      {/* Top Header */}
+      <div className="h-12 px-4 bg-[#0f1013] border-b border-[#1c1d22] flex items-center justify-between shrink-0">
+        <div className="flex items-center space-x-2.5">
           <button
             onClick={onCancel}
-            className="p-1 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 rounded transition cursor-pointer"
+            className="p-1 hover:bg-[#1a1b22] text-zinc-400 hover:text-zinc-200 rounded transition cursor-pointer"
             title="Back"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
           </button>
-          <span className="font-semibold text-zinc-200 text-xs uppercase tracking-tight">
+          <h1 className="font-semibold text-zinc-200 text-xs uppercase tracking-tight">
             {initialTemplate ? 'Edit Template' : 'Add HTML Templates'}
-          </span>
+          </h1>
 
           {!initialTemplate && (
-            <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded p-0.5 ml-2 text-[10px]">
+            <div className="flex items-center bg-[#0c0d10] border border-[#22242b] rounded p-0.5 ml-2 text-[10px]">
               <button
                 type="button"
                 onClick={() => setMode('single')}
                 className={`px-2 py-0.5 rounded transition cursor-pointer ${
-                  mode === 'single' ? 'bg-zinc-850 text-zinc-200 border border-zinc-750/50 font-medium' : 'text-zinc-400 hover:text-zinc-300'
+                  mode === 'single' ? 'bg-[#181a22] text-zinc-100 border border-[#232634] font-medium' : 'text-zinc-400 hover:text-zinc-300'
                 }`}
               >
                 Single Editor
@@ -253,7 +239,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
                 type="button"
                 onClick={() => setMode('bulk')}
                 className={`px-2 py-0.5 rounded transition cursor-pointer ${
-                  mode === 'bulk' ? 'bg-zinc-850 text-zinc-200 border border-zinc-750/50 font-medium' : 'text-zinc-400 hover:text-zinc-300'
+                  mode === 'bulk' ? 'bg-[#181a22] text-zinc-100 border border-[#232634] font-medium' : 'text-zinc-400 hover:text-zinc-300'
                 }`}
               >
                 Multiple Files Upload
@@ -267,7 +253,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded text-[11px] font-medium transition flex items-center space-x-1 cursor-pointer"
+              className="px-2.5 py-1 bg-[#14151b] hover:bg-[#1a1b22] text-zinc-300 border border-[#22242b] rounded text-[11px] font-medium transition flex items-center space-x-1 cursor-pointer"
             >
               <Upload className="w-3 h-3 text-zinc-400" />
               <span>Import .html</span>
@@ -283,7 +269,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
             <button
               onClick={handleSubmit}
               disabled={saving}
-              className="px-3 py-1 bg-zinc-800/80 hover:bg-zinc-800 text-zinc-200 border border-zinc-750/60 rounded text-[11px] font-medium transition flex items-center space-x-1 cursor-pointer disabled:opacity-50"
+              className="px-3 py-1 bg-[#22242c] hover:bg-[#2b2d38] text-zinc-200 border border-[#2e313c] rounded text-[11px] font-medium transition flex items-center space-x-1 cursor-pointer disabled:opacity-50"
             >
               <Save className="w-3 h-3" />
               <span>{saving ? 'Saving...' : 'Save Template'}</span>
@@ -294,7 +280,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
             <button
               type="button"
               onClick={() => bulkInputRef.current?.click()}
-              className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded text-[11px] font-medium transition flex items-center space-x-1 cursor-pointer"
+              className="px-2.5 py-1 bg-[#14151b] hover:bg-[#1a1b22] text-zinc-300 border border-[#22242b] rounded text-[11px] font-medium transition flex items-center space-x-1 cursor-pointer"
             >
               <Files className="w-3 h-3 text-zinc-400" />
               <span>Select Multiple Files</span>
@@ -311,7 +297,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
             <button
               onClick={handleBulkUploadSubmit}
               disabled={bulkUploading || bulkQueue.length === 0}
-              className="px-3 py-1 bg-zinc-800/80 hover:bg-zinc-800 text-zinc-200 border border-zinc-750/60 rounded text-[11px] font-medium transition flex items-center space-x-1 cursor-pointer disabled:opacity-50"
+              className="px-3 py-1 bg-[#22242c] hover:bg-[#2b2d38] text-zinc-200 border border-[#2e313c] rounded text-[11px] font-medium transition flex items-center space-x-1 cursor-pointer disabled:opacity-50"
             >
               <Save className="w-3 h-3" />
               <span>{bulkUploading ? 'Uploading...' : `Upload All (${bulkQueue.length})`}</span>
@@ -321,7 +307,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
       </div>
 
       {error && (
-        <div className="bg-rose-950/40 border-b border-rose-800/50 px-3 py-1.5 text-[11px] text-rose-300 flex items-center space-x-1.5">
+        <div className="bg-rose-950/40 border-b border-rose-900/50 px-4 py-2 text-[11px] text-rose-300 flex items-center space-x-1.5">
           <AlertCircle className="w-3 h-3 text-rose-400 shrink-0" />
           <span>{error}</span>
         </div>
@@ -329,9 +315,9 @@ export const TemplateCreateEdit: React.FC<Props> = ({
 
       {/* Mode 1: Multiple Files Bulk Upload */}
       {mode === 'bulk' && (
-        <div className="flex-1 p-3 overflow-y-auto space-y-3">
+        <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-[#090a0c]">
           {bulkMessage && (
-            <div className="p-2 bg-zinc-950 border border-zinc-800 rounded text-xs text-zinc-300">
+            <div className="p-2.5 bg-[#121317] border border-[#22242b] rounded text-xs text-zinc-300">
               {bulkMessage}
             </div>
           )}
@@ -341,7 +327,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
             <select
               value={bulkCategory}
               onChange={(e) => setBulkCategory(e.target.value)}
-              className="px-2 py-1 bg-zinc-950 border border-zinc-800 rounded text-xs text-zinc-200 focus:outline-none focus:border-zinc-700"
+              className="px-2.5 py-1 bg-[#0c0d10] border border-[#22242b] rounded text-xs text-zinc-200 focus:outline-none focus:border-[#383b47]"
             >
               {categoryOptions.map((c) => (
                 <option key={c} value={c}>
@@ -354,7 +340,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
           {bulkQueue.length === 0 ? (
             <div
               onClick={() => bulkInputRef.current?.click()}
-              className="border-2 border-dashed border-zinc-800 hover:border-zinc-700 rounded-lg p-8 flex flex-col items-center justify-center text-center cursor-pointer transition bg-zinc-950/40"
+              className="border border-dashed border-[#262834] hover:border-[#3a3d4f] rounded-lg p-10 flex flex-col items-center justify-center text-center cursor-pointer transition bg-[#0c0d10]"
             >
               <Files className="w-8 h-8 text-zinc-600 mb-2" />
               <p className="text-xs font-medium text-zinc-300 mb-1">
@@ -376,10 +362,10 @@ export const TemplateCreateEdit: React.FC<Props> = ({
                 </button>
               </div>
 
-              <div className="bg-zinc-950 border border-zinc-850 rounded divide-y divide-zinc-850">
+              <div className="bg-[#121317] border border-[#22242b] rounded divide-y divide-[#1c1d22]">
                 {bulkQueue.map((item, idx) => (
-                  <div key={idx} className="p-2 flex items-center justify-between text-xs">
-                    <div className="flex items-center space-x-2 min-w-0">
+                  <div key={idx} className="p-2.5 flex items-center justify-between text-xs">
+                    <div className="flex items-center space-x-2.5 min-w-0">
                       <FileText className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                       <div className="min-w-0">
                         <span className="font-medium text-zinc-200 truncate block text-[11px]">
@@ -392,7 +378,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
                     </div>
 
                     <div className="flex items-center space-x-2">
-                      <span className="text-[10px] font-mono text-zinc-400 bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">
+                      <span className="text-[10px] font-mono text-zinc-400 bg-[#0c0d10] px-1.5 py-0.5 rounded border border-[#22242b]">
                         {item.category}
                       </span>
                       {item.status === 'success' && (
@@ -415,11 +401,11 @@ export const TemplateCreateEdit: React.FC<Props> = ({
 
       {/* Mode 2: Single File Detailed Editor */}
       {mode === 'single' && (
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col min-h-0 bg-[#090a0c]">
           {/* Metadata Inputs Bar */}
-          <div className="p-2.5 bg-zinc-950 border-b border-zinc-850 grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs shrink-0">
+          <div className="p-3 bg-[#0c0d10] border-b border-[#1c1d22] grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs shrink-0">
             <div>
-              <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">
+              <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">
                 Title
               </label>
               <input
@@ -428,12 +414,12 @@ export const TemplateCreateEdit: React.FC<Props> = ({
                 placeholder="Component title"
                 value={title}
                 onChange={(e) => handleTitleChange(e.target.value)}
-                className="w-full px-2 py-1 bg-zinc-900 border border-zinc-800 rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-zinc-700"
+                className="w-full px-2.5 py-1 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47]"
               />
             </div>
 
             <div>
-              <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">
+              <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">
                 Slug
               </label>
               <input
@@ -442,18 +428,18 @@ export const TemplateCreateEdit: React.FC<Props> = ({
                 placeholder="component-slug"
                 value={slug}
                 onChange={(e) => setSlug(e.target.value)}
-                className="w-full px-2 py-1 bg-zinc-900 border border-zinc-800 rounded text-xs text-zinc-200 font-mono placeholder-zinc-600 focus:outline-none focus:border-zinc-700"
+                className="w-full px-2.5 py-1 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 font-mono placeholder-zinc-600 focus:outline-none focus:border-[#383b47]"
               />
             </div>
 
             <div>
-              <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">
+              <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">
                 Category
               </label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-2 py-1 bg-zinc-900 border border-zinc-800 rounded text-xs text-zinc-200 focus:outline-none focus:border-zinc-700"
+                className="w-full px-2.5 py-1 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 focus:outline-none focus:border-[#383b47]"
               >
                 {categoryOptions.map((c) => (
                   <option key={c} value={c}>
@@ -464,7 +450,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
             </div>
 
             <div>
-              <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-0.5">
+              <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">
                 Tags (comma separated)
               </label>
               <input
@@ -472,13 +458,13 @@ export const TemplateCreateEdit: React.FC<Props> = ({
                 placeholder="e.g. Button, Dark, Tailwind"
                 value={tagsInput}
                 onChange={(e) => setTagsInput(e.target.value)}
-                className="w-full px-2 py-1 bg-zinc-900 border border-zinc-800 rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-zinc-700"
+                className="w-full px-2.5 py-1 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47]"
               />
             </div>
           </div>
 
           {/* View Mode Bar */}
-          <div className="px-3 py-1 bg-zinc-900/60 border-b border-zinc-850 flex items-center justify-between text-[11px] shrink-0">
+          <div className="px-4 py-1.5 bg-[#0e0f13] border-b border-[#1c1d22] flex items-center justify-between text-[11px] shrink-0">
             <span className="text-[10px] text-zinc-400 uppercase font-mono">
               HTML Content ({new TextEncoder().encode(htmlContent).length} Bytes)
             </span>
@@ -486,8 +472,8 @@ export const TemplateCreateEdit: React.FC<Props> = ({
               <button
                 type="button"
                 onClick={() => setActiveTab('editor')}
-                className={`px-2 py-0.5 rounded text-[10px] transition cursor-pointer ${
-                  activeTab === 'editor' ? 'bg-zinc-850 text-zinc-200 border border-zinc-750/50' : 'text-zinc-400 hover:text-zinc-300'
+                className={`px-2.5 py-0.5 rounded text-[10px] transition cursor-pointer ${
+                  activeTab === 'editor' ? 'bg-[#181a22] text-zinc-100 border border-[#232634]' : 'text-zinc-400 hover:text-zinc-300'
                 }`}
               >
                 Code Only
@@ -495,8 +481,8 @@ export const TemplateCreateEdit: React.FC<Props> = ({
               <button
                 type="button"
                 onClick={() => setActiveTab('split')}
-                className={`px-2 py-0.5 rounded text-[10px] transition cursor-pointer ${
-                  activeTab === 'split' ? 'bg-zinc-850 text-zinc-200 border border-zinc-750/50' : 'text-zinc-400 hover:text-zinc-300'
+                className={`px-2.5 py-0.5 rounded text-[10px] transition cursor-pointer ${
+                  activeTab === 'split' ? 'bg-[#181a22] text-zinc-100 border border-[#232634]' : 'text-zinc-400 hover:text-zinc-300'
                 }`}
               >
                 Split View
@@ -504,8 +490,8 @@ export const TemplateCreateEdit: React.FC<Props> = ({
               <button
                 type="button"
                 onClick={() => setActiveTab('preview')}
-                className={`px-2 py-0.5 rounded text-[10px] transition cursor-pointer ${
-                  activeTab === 'preview' ? 'bg-zinc-850 text-zinc-200 border border-zinc-750/50' : 'text-zinc-400 hover:text-zinc-300'
+                className={`px-2.5 py-0.5 rounded text-[10px] transition cursor-pointer ${
+                  activeTab === 'preview' ? 'bg-[#181a22] text-zinc-100 border border-[#232634]' : 'text-zinc-400 hover:text-zinc-300'
                 }`}
               >
                 Preview Only
@@ -514,29 +500,29 @@ export const TemplateCreateEdit: React.FC<Props> = ({
           </div>
 
           {/* Editor & Preview Panels */}
-          <div className="flex-1 flex min-h-0 overflow-hidden">
+          <div className="flex-1 flex min-h-0 overflow-hidden bg-[#090a0c]">
             {(activeTab === 'editor' || activeTab === 'split') && (
               <div
-                className={`flex-1 flex flex-col bg-zinc-950 min-w-0 ${
-                  activeTab === 'split' ? 'border-r border-zinc-850' : ''
+                className={`flex-1 flex flex-col bg-[#090a0c] min-w-0 ${
+                  activeTab === 'split' ? 'border-r border-[#1c1d22]' : ''
                 }`}
               >
                 <textarea
                   value={htmlContent}
                   onChange={(e) => setHtmlContent(e.target.value)}
-                  className="w-full h-full p-3 bg-zinc-950 text-zinc-300 font-mono text-[11px] leading-relaxed resize-none focus:outline-none selection:bg-zinc-800"
+                  className="w-full h-full p-4 bg-[#090a0c] text-zinc-200 font-mono text-[11px] leading-relaxed resize-none focus:outline-none selection:bg-[#27272a]"
                   spellCheck={false}
                 />
               </div>
             )}
 
             {(activeTab === 'preview' || activeTab === 'split') && (
-              <div className="flex-1 flex flex-col bg-zinc-950 min-w-0 overflow-hidden">
+              <div className="flex-1 flex flex-col bg-[#0b0c0e] min-w-0 overflow-hidden">
                 <iframe
                   title="Live Preview"
                   srcDoc={htmlContent}
                   sandbox="allow-scripts allow-modals"
-                  className="w-full h-full border-0 bg-zinc-950"
+                  className="w-full h-full border-0 bg-[#0b0c0e]"
                 />
               </div>
             )}

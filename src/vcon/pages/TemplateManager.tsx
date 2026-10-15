@@ -47,14 +47,15 @@ export const TemplateManager: React.FC<Props> = ({
   });
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-zinc-900 text-xs overflow-hidden">
-      {/* Top Toolbar */}
-      <div className="h-10 px-3.5 flex items-center justify-between shrink-0 bg-zinc-950">
-        <div className="flex items-center space-x-2">
-          <span className="font-medium text-zinc-300 uppercase text-[11px] tracking-tight">
+    <div className="flex-1 flex flex-col min-w-0 bg-[#090a0c] text-xs overflow-hidden">
+      {/* Top Header */}
+      <div className="h-12 px-4 flex items-center justify-between shrink-0 bg-[#0f1013] border-b border-[#1c1d22]">
+        <div className="flex items-center space-x-2.5">
+          <Layers className="w-4 h-4 text-zinc-400" />
+          <h1 className="font-semibold text-zinc-200 uppercase text-xs tracking-tight">
             Templates
-          </span>
-          <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900 px-2 py-0.5 rounded">
+          </h1>
+          <span className="text-[10px] text-zinc-400 font-mono bg-[#14151b] border border-[#22242b] px-2 py-0.5 rounded">
             {templates.length}
           </span>
         </div>
@@ -63,7 +64,7 @@ export const TemplateManager: React.FC<Props> = ({
           <button
             onClick={onRefresh}
             disabled={loading}
-            className="p-1.5 bg-zinc-900 hover:bg-zinc-850 text-zinc-400 hover:text-zinc-200 rounded transition cursor-pointer"
+            className="p-1.5 bg-[#14151b] hover:bg-[#1a1b22] text-zinc-400 hover:text-zinc-200 border border-[#22242b] rounded transition cursor-pointer"
             title="Refresh"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -71,16 +72,16 @@ export const TemplateManager: React.FC<Props> = ({
 
           <button
             onClick={onAddNew}
-            className="px-2.5 py-1.5 bg-zinc-800/90 hover:bg-zinc-800 text-zinc-300 rounded text-xs font-medium transition flex items-center space-x-1 cursor-pointer"
+            className="px-2.5 py-1.5 bg-[#22242c] hover:bg-[#2b2d38] text-zinc-200 border border-[#2e313c] rounded text-xs font-medium transition flex items-center space-x-1.5 cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5 text-zinc-400" />
             <span>New Template</span>
           </button>
         </div>
       </div>
 
       {/* Filters row */}
-      <div className="px-3.5 py-2 flex items-center space-x-2.5 bg-zinc-900/80 shrink-0">
+      <div className="px-4 py-2.5 flex items-center space-x-2.5 bg-[#0c0d10] border-b border-[#1c1d22] shrink-0">
         <div className="relative flex-1 max-w-xs">
           <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-2" />
           <input
@@ -88,7 +89,7 @@ export const TemplateManager: React.FC<Props> = ({
             placeholder="Search templates..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-8 pr-2.5 py-1 bg-zinc-950 rounded text-xs text-zinc-300 placeholder-zinc-500 focus:outline-none focus:bg-zinc-950/80"
+            className="w-full pl-8 pr-2.5 py-1 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-[#383b47]"
           />
         </div>
 
@@ -99,8 +100,8 @@ export const TemplateManager: React.FC<Props> = ({
               onClick={() => setSelectedCategory(cat)}
               className={`px-2.5 py-1 rounded text-[10px] font-medium transition cursor-pointer ${
                 selectedCategory === cat
-                  ? 'bg-zinc-850 text-zinc-200'
-                  : 'text-zinc-400 hover:text-zinc-300 hover:bg-zinc-950/60'
+                  ? 'bg-[#181a22] text-zinc-100 border border-[#232634]'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#13141a]'
               }`}
             >
               {cat === 'all' ? 'All' : cat}
@@ -110,62 +111,66 @@ export const TemplateManager: React.FC<Props> = ({
       </div>
 
       {/* Table Content */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto bg-[#090a0c]">
         {filtered.length === 0 ? (
           <div className="h-48 flex flex-col items-center justify-center text-center p-6 text-zinc-500 font-mono text-xs">
-            <Layers className="w-6 h-6 text-zinc-700 mb-1" />
+            <Layers className="w-6 h-6 text-zinc-700 mb-2" />
             <span>No templates found</span>
           </div>
         ) : (
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-zinc-950/80 text-zinc-400 uppercase text-[9px] font-mono tracking-wider sticky top-0 z-10">
-                <th className="py-2.5 px-3.5">Title & Slug</th>
-                <th className="py-2.5 px-3.5">Category</th>
-                <th className="py-2.5 px-3.5">Size</th>
-                <th className="py-2.5 px-3.5">Downloads</th>
-                <th className="py-2.5 px-3.5">Storage</th>
-                <th className="py-2.5 px-3.5 text-right">Actions</th>
+              <tr className="bg-[#0f1013] border-b border-[#1c1d22] text-zinc-400 uppercase text-[9px] font-mono tracking-wider sticky top-0 z-10">
+                <th className="py-2.5 px-4">Title & Slug</th>
+                <th className="py-2.5 px-4">Category</th>
+                <th className="py-2.5 px-4">Size</th>
+                <th className="py-2.5 px-4">Downloads</th>
+                <th className="py-2.5 px-4">Storage</th>
+                <th className="py-2.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-[#1c1d22]">
               {filtered.map((item) => (
-                <tr key={item.id} className="hover:bg-zinc-850/30 transition">
-                  <td className="py-2 px-3.5">
-                    <span className="font-medium text-zinc-300 block text-[11px]">{item.title}</span>
+                <tr key={item.id} className="hover:bg-[#121317] transition-colors">
+                  <td className="py-2 px-4">
+                    <span className="font-medium text-zinc-200 block text-[11px]">{item.title}</span>
                     <span className="text-[10px] text-zinc-500 font-mono">/{item.slug}</span>
                   </td>
-                  <td className="py-2 px-3.5 text-zinc-400 text-[11px]">{item.category}</td>
-                  <td className="py-2 px-3.5 text-zinc-500 font-mono text-[10px]">
+                  <td className="py-2 px-4 text-zinc-400 text-[11px]">{item.category}</td>
+                  <td className="py-2 px-4 text-zinc-500 font-mono text-[10px]">
                     {(item.file_size / 1024).toFixed(1)} KB
                   </td>
-                  <td className="py-2 px-3.5 text-zinc-400 font-mono text-[11px]">{item.downloads}</td>
-                  <td className="py-2 px-3.5">
+                  <td className="py-2 px-4 text-zinc-400 font-mono text-[11px]">{item.downloads}</td>
+                  <td className="py-2 px-4">
                     {item.r2_key ? (
-                      <span className="text-[10px] text-emerald-400/80 font-mono">R2 Synced</span>
+                      <span className="text-[10px] text-emerald-400/90 font-mono bg-emerald-950/30 border border-emerald-900/40 px-1.5 py-0.5 rounded">
+                        R2 Synced
+                      </span>
                     ) : (
-                      <span className="text-[10px] text-zinc-500 font-mono">Turso</span>
+                      <span className="text-[10px] text-zinc-500 font-mono bg-[#14151b] border border-[#22242b] px-1.5 py-0.5 rounded">
+                        Turso
+                      </span>
                     )}
                   </td>
-                  <td className="py-2 px-3.5 text-right">
+                  <td className="py-2 px-4 text-right">
                     <div className="flex items-center justify-end space-x-1">
                       <button
                         onClick={() => onPreview(item)}
-                        className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded transition cursor-pointer"
+                        className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-[#181a22] rounded transition cursor-pointer"
                         title="Preview"
                       >
                         <Eye className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => onEdit(item)}
-                        className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded transition cursor-pointer"
+                        className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-[#181a22] rounded transition cursor-pointer"
                         title="Edit"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => onDelete(item.id)}
-                        className="p-1.5 text-zinc-400 hover:text-rose-400 hover:bg-zinc-800 rounded transition cursor-pointer"
+                        className="p-1.5 text-zinc-400 hover:text-rose-400 hover:bg-rose-950/20 rounded transition cursor-pointer"
                         title="Delete"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
