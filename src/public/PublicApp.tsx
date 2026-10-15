@@ -258,7 +258,7 @@ export const PublicApp: React.FC = () => {
                     title={item.title}
                     srcDoc={item.html_content}
                     sandbox="allow-scripts"
-                    className="w-[133.333%] h-[133.333%] border-0 pointer-events-none scale-75 origin-center opacity-95 group-hover:opacity-100 transition-opacity duration-150 shadow-none"
+                    className="absolute left-0 top-0 w-[400%] h-[400%] max-w-none border-0 pointer-events-none scale-[0.25] origin-top-left opacity-95 group-hover:opacity-100 transition-opacity duration-150 shadow-none"
                   />
                   <div className="absolute inset-0 bg-transparent" />
 
@@ -325,6 +325,11 @@ export const PublicApp: React.FC = () => {
             ))}
           </div>
         )}
+
+        <footer className="mt-8 border-t border-zinc-800/80 py-3 flex flex-col items-center justify-between gap-1.5 text-[10px] text-zinc-500 sm:flex-row">
+          <span className="font-medium text-zinc-400">{settings.site_name || 'HTML Snippets'}</span>
+          <span>© {new Date().getFullYear()}</span>
+        </footer>
       </main>
 
       {/* View Modal */}

@@ -133,7 +133,7 @@ export const TursoManager: React.FC<Props> = ({
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#090a0c]">
         {/* Status Card */}
-        <div className="bg-[#121317] border border-[#22242b] rounded-lg p-4 space-y-3 max-w-4xl">
+        <div className="bg-[#121317] border border-[#22242b] rounded-lg p-4 space-y-3 w-full max-w-6xl mx-auto">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               {status.connected ? (
@@ -185,7 +185,7 @@ export const TursoManager: React.FC<Props> = ({
         </div>
 
         {/* Runtime Configuration Form */}
-        <div className="bg-[#121317] border border-[#22242b] rounded-lg p-4 space-y-3 max-w-4xl">
+        <div className="bg-[#121317] border border-[#22242b] rounded-lg p-4 space-y-3 w-full max-w-6xl mx-auto">
           <span className="font-semibold text-zinc-200 uppercase text-[10px] tracking-wider block">
             Update Turso Credentials
           </span>
@@ -230,7 +230,7 @@ export const TursoManager: React.FC<Props> = ({
         </div>
 
         {/* Console logs */}
-        <div className="bg-[#121317] border border-[#22242b] rounded-lg p-4 space-y-2 max-w-4xl">
+        <div className="bg-[#121317] border border-[#22242b] rounded-lg p-4 space-y-2 w-full max-w-6xl mx-auto">
           <div className="flex items-center space-x-1.5 text-zinc-400 font-mono text-[10px] uppercase">
             <Terminal className="w-3.5 h-3.5 text-zinc-500" />
             <span>Diagnostic Logs</span>

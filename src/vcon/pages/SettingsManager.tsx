@@ -364,7 +364,7 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#090a0c]">
         {/* TAB 1: Site Identity & Branding */}
         {activeSubTab === 'branding' && (
-          <form onSubmit={handleSaveSettings} className="space-y-4 max-w-4xl">
+          <form onSubmit={handleSaveSettings} className="space-y-4 w-full max-w-6xl mx-auto">
             {brandingFeedback && (
               <div
                 className={`p-2.5 rounded text-[11px] border ${
@@ -590,7 +590,7 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
 
         {/* TAB 2: Admin Users Management */}
         {activeSubTab === 'admins' && (
-          <div className="space-y-4 max-w-4xl">
+          <div className="space-y-4 w-full max-w-6xl mx-auto">
             {adminFeedback && (
               <div
                 className={`p-2.5 rounded text-[11px] border ${
