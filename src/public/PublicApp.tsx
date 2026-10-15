@@ -229,7 +229,7 @@ export const PublicApp: React.FC = () => {
       </header>
 
       {/* Main Grid Content */}
-      <main className="flex-1 w-full max-w-[1560px] mx-auto p-3.5 sm:p-5 overflow-y-auto">
+      <main className="flex-1 w-full max-w-[1440px] mx-auto p-3.5 sm:px-8 sm:py-5 lg:px-10 overflow-y-auto">
         {loading ? (
           <div className="h-64 flex flex-col items-center justify-center text-xs text-zinc-500 font-mono">
             Loading snippets...
@@ -258,7 +258,7 @@ export const PublicApp: React.FC = () => {
                     title={item.title}
                     srcDoc={item.html_content}
                     sandbox="allow-scripts"
-                    className="w-[130%] h-[130%] border-0 pointer-events-none scale-75 origin-top-left opacity-95 group-hover:opacity-100 transition-opacity duration-150 shadow-none"
+                    className="w-[133.333%] h-[133.333%] border-0 pointer-events-none scale-75 origin-center opacity-95 group-hover:opacity-100 transition-opacity duration-150 shadow-none"
                   />
                   <div className="absolute inset-0 bg-transparent" />
 
