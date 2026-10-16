@@ -22,6 +22,137 @@ import { DevLogEntry, DevLogPanel } from './DevLogPanel.tsx';
 
 const rawTemplateUrl = (slug: string, hideScrollbars = false) =>
   `/api/templates/${encodeURIComponent(slug)}/raw${hideScrollbars ? '?hide_scrollbars=1' : ''}`;
+const assignPreviewTextIds = (previewDocument: Document) => {
+  const targets = new Set<Element>();
+  const walker = previewDocument.createTreeWalker(previewDocument.body, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!node.textContent?.trim()) continue;
+    const target = node.parentElement;
+    if (
+      !target ||
+      target.closest('script,style,textarea,input,select,option,svg,canvas,[contenteditable],[aria-hidden="true"]')
+    ) continue;
+    targets.add(target);
+  }
+
+  targets.forEach((target, index) => target.setAttribute('data-vib-editor-id', String(index)));
+};
+type PreviewTextEdit = {
+  shape: string[];
+  textNodes: Array<{ index: number; text: string }>;
+};
+const getPreviewNodeShape = (target: Element) => Array.from(target.childNodes).map((node) => {
+  if (node.nodeType === Node.ELEMENT_NODE) return `element:${(node as Element).tagName}`;
+  if (node.nodeType === Node.TEXT_NODE) return 'text';
+  if (node.nodeType === Node.COMMENT_NODE) return 'comment';
+  return `node:${node.nodeType}`;
+});
+const applyPreviewTextEdits = (html: string, edits: Record<string, PreviewTextEdit>) => {
+  const editedDocument = new DOMParser().parseFromString(html, 'text/html');
+  assignPreviewTextIds(editedDocument);
+  Object.entries(edits).forEach(([id, edit]) => {
+    const target = editedDocument.querySelector(`[data-vib-editor-id="${id}"]`);
+    if (!target) return;
+    const originalShape = getPreviewNodeShape(target);
+    if (originalShape.length !== edit.shape.length || originalShape.some((node, index) => node !== edit.shape[index])) return;
+    edit.textNodes.forEach(({ index, text }) => {
+      const node = target.childNodes[index];
+      if (node?.nodeType === Node.TEXT_NODE) node.textContent = text;
+    });
+  });
+  editedDocument.querySelectorAll('[data-vib-editor-id]').forEach((target) => {
+    target.removeAttribute('data-vib-editor-id');
+  });
+  const doctype = editedDocument.doctype?.name || 'html';
+  return `<!DOCTYPE ${doctype}>\n${editedDocument.documentElement.outerHTML}`;
+};
+const createModalPreviewDocument = (html: string, slug: string) => {
+  const previewDocument = new DOMParser().parseFromString(html, 'text/html');
+  assignPreviewTextIds(previewDocument);
+  if (!previewDocument.head.querySelector('base[href]')) {
+    const base = previewDocument.createElement('base');
+    base.href = new URL(rawTemplateUrl(slug), window.location.origin).href;
+    base.dataset.vibEditorInjected = 'base';
+    previewDocument.head.prepend(base);
+  }
+
+  const scrollbarStyle = previewDocument.createElement('style');
+  scrollbarStyle.dataset.vibEditorInjected = 'scrollbars';
+  scrollbarStyle.textContent = 'html,body,*{scrollbar-width:none!important;-ms-overflow-style:none!important}html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}';
+  previewDocument.head.append(scrollbarStyle);
+
+  const editorScript = previewDocument.createElement('script');
+  editorScript.dataset.vibEditorInjected = 'bootstrap';
+  editorScript.textContent = `(function () {
+    const blockedSelector = 'script,style,textarea,input,select,option,svg,canvas,[contenteditable]:not([data-vib-editor-target]),[aria-hidden="true"]';
+    const setEditable = (enabled) => {
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      const targets = new Set();
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (!node.textContent?.trim()) continue;
+        const target = node.parentElement;
+        if (!target || !target.hasAttribute('data-vib-editor-id') || target.closest(blockedSelector) || target.getClientRects().length === 0) continue;
+        let ancestor = target;
+        let visible = true;
+        while (ancestor) {
+          const style = window.getComputedStyle(ancestor);
+          if (ancestor.hidden || style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0) {
+            visible = false;
+            break;
+          }
+          ancestor = ancestor.parentElement;
+        }
+        if (!visible) continue;
+        targets.add(target);
+      }
+      targets.forEach((target) => {
+        target.dataset.vibEditorTarget = 'true';
+        target.contentEditable = enabled ? 'plaintext-only' : 'false';
+      });
+    };
+
+    const getNodeShape = (target) => Array.from(target.childNodes).map((node) => {
+      if (node.nodeType === Node.ELEMENT_NODE) return 'element:' + node.tagName;
+      if (node.nodeType === Node.TEXT_NODE) return 'text';
+      if (node.nodeType === Node.COMMENT_NODE) return 'comment';
+      return 'node:' + node.nodeType;
+    });
+
+    const editedTexts = new Map();
+    const publishEditedText = (target) => {
+      const id = target.getAttribute('data-vib-editor-id');
+      if (id === null) return;
+      const textNodes = Array.from(target.childNodes)
+        .map((node, index) => node.nodeType === Node.TEXT_NODE ? { index, text: node.textContent || '' } : null)
+        .filter((entry) => entry !== null);
+      editedTexts.set(id, { shape: getNodeShape(target), textNodes });
+      window.parent.postMessage({
+        type: 'public-preview-text-edits',
+        edits: Array.from(editedTexts, ([editedId, edit]) => ({ id: editedId, ...edit })),
+      }, '*');
+    };
+
+    setEditable(true);
+    window.addEventListener('message', (event) => {
+      if (event.source !== parent || event.data?.type !== 'public-preview-editable') return;
+      setEditable(event.data.enabled === true);
+    });
+    document.addEventListener('input', (event) => {
+      if (!(event.target instanceof Element) || event.target.closest('input,textarea,select,option')) return;
+      const target = event.target.closest('[data-vib-editor-target]');
+      if (target) publishEditedText(target);
+    }, true);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && event.target instanceof Element && event.target.closest('[data-vib-editor-target]')) {
+        event.preventDefault();
+      }
+    }, true);
+  })();`;
+  previewDocument.body.append(editorScript);
+
+  const doctype = previewDocument.doctype?.name || 'html';
+  return `<!DOCTYPE ${doctype}>\n${previewDocument.documentElement.outerHTML}`;
+};
 const templateModalUrl = (slug: string, state: 'opened' | 'closed'): string | null => {
   const pathname = `/${encodeURIComponent(slug)}`;
   const normalizedPathname = new URL(pathname, window.location.origin).pathname;
@@ -138,9 +269,23 @@ export const PublicApp: React.FC = () => {
   const [viewMode, setViewMode] = useState<'preview' | 'code'>('preview');
   const [modalHtml, setModalHtml] = useState<string | null>(null);
   const [modalHtmlError, setModalHtmlError] = useState(false);
+  const [modalPreviewHtml, setModalPreviewHtml] = useState<string | null>(null);
+  const [modalTextEdits, setModalTextEdits] = useState<Record<string, PreviewTextEdit>>({});
+  const [modalPreviewRenderHtml, setModalPreviewRenderHtml] = useState<string | null>(null);
+  const [modalPreviewLoading, setModalPreviewLoading] = useState(false);
+  const [previewEditable, setPreviewEditable] = useState(true);
   const [deviceSize, setDeviceSize] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const previewViewportRef = useRef<HTMLDivElement>(null);
+  const modalPreviewFrameRef = useRef<HTMLIFrameElement>(null);
   const [previewScale, setPreviewScale] = useState(0.5);
+  const modalPreviewSrcDoc = useMemo(() => {
+    if (!activeModal || modalPreviewRenderHtml === null) return undefined;
+    return createModalPreviewDocument(modalPreviewRenderHtml, activeModal.slug);
+  }, [activeModal?.slug, modalPreviewRenderHtml]);
+  const modalEditedHtml = useMemo(() => {
+    if (modalPreviewHtml === null || Object.keys(modalTextEdits).length === 0) return null;
+    return applyPreviewTextEdits(modalPreviewHtml, modalTextEdits);
+  }, [modalPreviewHtml, modalTextEdits]);
   const templateHtmlCache = useRef(new Map<string, string>());
   const templateHtmlRequests = useRef(new Map<string, Promise<string>>());
   const snippetsRef = useRef(snippets);
@@ -284,6 +429,11 @@ export const PublicApp: React.FC = () => {
       setViewMode('preview');
       setModalHtml(null);
       setModalHtmlError(false);
+      setModalPreviewHtml(null);
+      setModalTextEdits({});
+      setModalPreviewRenderHtml(null);
+      setModalPreviewLoading(true);
+      setPreviewEditable(true);
       setDeviceSize('desktop');
     }
   }, [categoriesLoading, publicCategories, trackActivity]);
@@ -307,6 +457,11 @@ export const PublicApp: React.FC = () => {
     setViewMode('preview');
     setModalHtml(null);
     setModalHtmlError(false);
+    setModalPreviewHtml(null);
+    setModalTextEdits({});
+    setModalPreviewRenderHtml(null);
+    setModalPreviewLoading(true);
+    setPreviewEditable(true);
     setDeviceSize('desktop');
   };
 
@@ -336,6 +491,11 @@ export const PublicApp: React.FC = () => {
     setActiveModal(null);
     setModalRouteError(false);
     setCategoryRouteError(false);
+    setModalPreviewHtml(null);
+    setModalTextEdits({});
+    setModalPreviewRenderHtml(null);
+    setModalPreviewLoading(false);
+    setPreviewEditable(true);
   }, [activeModal, publicCategories, trackActivity]);
 
   useEffect(() => {
@@ -377,6 +537,70 @@ export const PublicApp: React.FC = () => {
     templateHtmlRequests.current.set(slug, request);
     return request;
   }, [recordApiFailure, recordApiResponse]);
+
+  useEffect(() => {
+    if (!activeModal || viewMode !== 'preview' || modalPreviewHtml !== null || modalPreviewError) return;
+
+    let canceled = false;
+    setModalPreviewLoading(true);
+    getTemplateHtml(activeModal.slug)
+      .then((html) => {
+        if (!canceled) {
+          setModalPreviewHtml(html);
+          setModalPreviewRenderHtml(html);
+        }
+      })
+      .catch(() => {
+        if (!canceled) {
+          setModalPreviewError(true);
+          setModalPreviewLoading(false);
+        }
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [activeModal, getTemplateHtml, modalPreviewError, modalPreviewHtml, viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== 'preview' || modalPreviewHtml === null) return;
+    modalPreviewFrameRef.current?.contentWindow?.postMessage({
+      type: 'public-preview-editable',
+      enabled: previewEditable,
+    }, '*');
+  }, [modalPreviewHtml, previewEditable, viewMode]);
+
+  useEffect(() => {
+    if (!activeModal) return;
+
+    const handlePreviewHtmlMessage = (event: MessageEvent) => {
+      if (event.source !== modalPreviewFrameRef.current?.contentWindow) return;
+      const message = event.data as { type?: unknown; edits?: unknown } | null;
+      if (message?.type !== 'public-preview-text-edits' || !Array.isArray(message.edits)) return;
+      const edits = message.edits.filter((item): item is { id: string; shape: string[]; textNodes: Array<{ index: number; text: string }> } => {
+        if (!item || typeof item !== 'object') return false;
+        const edit = item as { id?: unknown; shape?: unknown; textNodes?: unknown };
+        if (typeof edit.id !== 'string' || !/^\d+$/.test(edit.id) || !Array.isArray(edit.shape) || !Array.isArray(edit.textNodes)) return false;
+        if (!edit.shape.every((entry) => typeof entry === 'string')) return false;
+        return edit.textNodes.every((node) => {
+          if (!node || typeof node !== 'object') return false;
+          const textNode = node as { index?: unknown; text?: unknown };
+          return Number.isInteger(textNode.index) && Number(textNode.index) >= 0 && typeof textNode.text === 'string';
+        });
+      });
+      if (edits.length === 0) return;
+      setModalTextEdits((current) => {
+        const updated = { ...current };
+        edits.forEach(({ id, textNodes }) => {
+          updated[id] = textNodes;
+        });
+        return updated;
+      });
+    };
+
+    window.addEventListener('message', handlePreviewHtmlMessage);
+    return () => window.removeEventListener('message', handlePreviewHtmlMessage);
+  }, [activeModal?.slug]);
 
   useEffect(() => {
     if (!activeModal || viewMode !== 'preview' || deviceSize !== 'desktop') return;
@@ -670,10 +894,11 @@ export const PublicApp: React.FC = () => {
     }
   }, [currentPage, pageSize, selectedCategory, totalPages]);
 
-  const handleDownload = async (item: PublicTemplateMetadata) => {
+  const handleDownload = async (item: PublicTemplateMetadata, editedHtml?: string | null) => {
     try {
       const endpoint = `/api/templates/${encodeURIComponent(item.slug)}/download`;
-      const html = await getTemplateHtml(item.slug);
+      const isEditedDownload = typeof editedHtml === 'string';
+      const html = isEditedDownload ? editedHtml : await getTemplateHtml(item.slug);
       const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -685,18 +910,20 @@ export const PublicApp: React.FC = () => {
       URL.revokeObjectURL(url);
 
       showToast('Download started');
-      const counterStartedAt = performance.now();
-      fetch(endpoint, { method: 'POST' })
-        .then(async (response) => {
-          recordApiResponse('POST', endpoint, response, counterStartedAt);
-          const data: any = await response.json();
-          if (response.ok && data.success && Number.isFinite(Number(data.downloads))) {
-            setSnippets((current) => current.map((snippet) =>
-              snippet.id === item.id ? { ...snippet, downloads: Number(data.downloads) } : snippet
-            ));
-          }
-        })
-        .catch((error) => recordApiFailure('POST', endpoint, error));
+      if (!isEditedDownload) {
+        const counterStartedAt = performance.now();
+        fetch(endpoint, { method: 'POST' })
+          .then(async (response) => {
+            recordApiResponse('POST', endpoint, response, counterStartedAt);
+            const data: any = await response.json();
+            if (response.ok && data.success && Number.isFinite(Number(data.downloads))) {
+              setSnippets((current) => current.map((snippet) =>
+                snippet.id === item.id ? { ...snippet, downloads: Number(data.downloads) } : snippet
+              ));
+            }
+          })
+          .catch((error) => recordApiFailure('POST', endpoint, error));
+      }
     } catch {
       showToast('Failed to load template');
     }
@@ -1149,7 +1376,12 @@ export const PublicApp: React.FC = () => {
 
                 <div className="flex items-center bg-zinc-900 border border-zinc-800 p-0.5 rounded text-[10px] shadow-none">
                   <button
-                    onClick={() => setViewMode('preview')}
+                    onClick={() => {
+                      if (viewMode !== 'preview') {
+                        setModalPreviewRenderHtml(modalEditedHtml ?? modalPreviewHtml);
+                      }
+                      setViewMode('preview');
+                    }}
                     className={`px-2.5 py-1 rounded font-medium transition cursor-pointer shadow-none border-0 ${
                       viewMode === 'preview'
                         ? 'bg-zinc-800 text-zinc-200'
@@ -1169,6 +1401,24 @@ export const PublicApp: React.FC = () => {
                     HTML
                   </button>
                 </div>
+
+                {viewMode === 'preview' && (
+                  <label className="flex shrink-0 cursor-pointer select-none items-center gap-1.5 text-[10px] font-medium text-zinc-300">
+                    <span>Editable</span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      checked={previewEditable}
+                      onChange={(event) => setPreviewEditable(event.target.checked)}
+                      className="peer sr-only"
+                      aria-label="Editable preview"
+                    />
+                    <span
+                      aria-hidden="true"
+                      className="relative h-4 w-7 rounded-full bg-zinc-700 transition-colors after:absolute after:left-0.5 after:top-0.5 after:h-3 after:w-3 after:rounded-full after:bg-zinc-100 after:transition-transform peer-checked:bg-emerald-700 peer-checked:after:translate-x-3 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500/60"
+                    />
+                  </label>
+                )}
 
                 {viewMode === 'code' && (
                   <button
@@ -1196,7 +1446,7 @@ export const PublicApp: React.FC = () => {
                 )}
 
                 <button
-                  onClick={() => handleDownload(activeModal)}
+                  onClick={() => handleDownload(activeModal, modalEditedHtml)}
                   className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 hover:text-zinc-100 rounded text-[11px] font-medium transition flex items-center space-x-1 cursor-pointer shadow-none border-0"
                 >
                   <Download className="w-3 h-3" />
@@ -1223,14 +1473,35 @@ export const PublicApp: React.FC = () => {
                   }`}
                   style={deviceSize === 'desktop' ? { transform: `translate(-50%, -50%) scale(${previewScale})` } : undefined}
                 >
-                  <iframe
-                    title="Modal Preview"
-                    src={rawTemplateUrl(activeModal.slug, true)}
-                    sandbox="allow-scripts allow-modals"
-                    onLoad={() => setModalPreviewError(false)}
-                    onError={() => setModalPreviewError(true)}
-                    className="w-full h-full border-0 shadow-none"
-                  />
+                  {modalPreviewSrcDoc !== undefined && (
+                    <iframe
+                      ref={modalPreviewFrameRef}
+                      title="Modal Preview"
+                      srcDoc={modalPreviewSrcDoc}
+                      sandbox="allow-scripts allow-modals"
+                      onLoad={() => {
+                        setModalPreviewError(false);
+                        setModalPreviewLoading(false);
+                        modalPreviewFrameRef.current?.contentWindow?.postMessage({
+                          type: 'public-preview-editable',
+                          enabled: previewEditable,
+                        }, '*');
+                      }}
+                      onError={() => {
+                        setModalPreviewError(true);
+                        setModalPreviewLoading(false);
+                      }}
+                      className="w-full h-full border-0 shadow-none"
+                    />
+                  )}
+                  {modalPreviewLoading && !modalPreviewError && (
+                    <div role="status" aria-live="polite" className="absolute inset-0 z-10 flex items-center justify-center bg-[#0b0c0e]/85 text-xs text-zinc-400">
+                      <span className="flex items-center gap-2">
+                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                        Loading preview...
+                      </span>
+                    </div>
+                  )}
                   {modalPreviewError && (
                     <div role="status" aria-live="polite" className="absolute inset-0 flex items-center justify-center bg-[#0b0c0e] text-xs text-zinc-400">
                       Preview unavailable
