@@ -1,5 +1,5 @@
 import { createClient, type Client } from '@libsql/client';
-import { HtmlTemplate, PublicTemplateMetadata, Category, SiteSettings, AdminUser } from '../types.ts';
+import type { HtmlTemplate, PublicTemplateMetadata, Category, SiteSettings, AdminUser } from '../types.ts';
 import { INITIAL_SEEDS } from './initialTemplates.ts';
 
 let cachedClient: Client | null = null;
@@ -55,6 +55,9 @@ let mockCategories: Category[] = INITIAL_CATEGORIES.map((name) => {
 let mockSettings: Record<string, string> = {
   site_name: 'Free HTML Templates',
   site_description: 'Browse free HTML templates and responsive website components. Preview designs, inspect source code, and download HTML snippets to customize for your project.',
+  seo_title: '',
+  seo_description: '',
+  seo_keywords: '',
   app_logo: '',
   favicon_url: '',
   og_image: '',
@@ -94,6 +97,22 @@ const schemaInitializedClients = new WeakSet<object>();
 const failClosedTursoClients = new WeakSet<object>();
 const mockActivityDaily = new Map<string, { day: string; event: ActivityEvent; slug: string; count: number }>();
 let lastActivityCleanupDay = '';
+
+async function ensureSeoColumns(client: Client, table: 'templates' | 'categories'): Promise<void> {
+  const columns = ['seo_title', 'seo_description', 'seo_keywords'];
+  let columnInfo = await client.execute(`PRAGMA table_info(${table})`);
+  const present = new Set(columnInfo.rows.map((row: any) => String(row.name)));
+  for (const column of columns) {
+    if (present.has(column)) continue;
+    try {
+      await client.execute(`ALTER TABLE ${table} ADD COLUMN ${column} TEXT NOT NULL DEFAULT ''`);
+    } catch (error) {
+      columnInfo = await client.execute(`PRAGMA table_info(${table})`);
+      if (!columnInfo.rows.some((row: any) => String(row.name) === column)) throw error;
+    }
+    present.add(column);
+  }
+}
 
 export type ActivityEvent = 'category_view' | 'template_open' | 'download_request';
 export interface DailyActivityAggregate {
@@ -191,6 +210,9 @@ export async function initTursoSchema(client: Client): Promise<{ success: boolea
         category TEXT NOT NULL DEFAULT 'General',
         tags TEXT DEFAULT '[]',
         description TEXT NOT NULL DEFAULT '',
+        seo_title TEXT NOT NULL DEFAULT '',
+        seo_description TEXT NOT NULL DEFAULT '',
+        seo_keywords TEXT NOT NULL DEFAULT '',
         html_content TEXT NOT NULL,
         r2_key TEXT,
         r2_url TEXT,
@@ -211,6 +233,7 @@ export async function initTursoSchema(client: Client): Promise<{ success: boolea
         if (!columnsAfterRace.rows.some((row: any) => String(row.name) === 'description')) throw error;
       }
     }
+    await ensureSeoColumns(client, 'templates');
 
     await client.execute(`
       CREATE TABLE IF NOT EXISTS template_sync_jobs (
@@ -252,10 +275,14 @@ export async function initTursoSchema(client: Client): Promise<{ success: boolea
         name TEXT UNIQUE NOT NULL,
         slug TEXT UNIQUE NOT NULL,
         status TEXT NOT NULL DEFAULT 'active',
+        seo_title TEXT NOT NULL DEFAULT '',
+        seo_description TEXT NOT NULL DEFAULT '',
+        seo_keywords TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
     `);
+    await ensureSeoColumns(client, 'categories');
 
     await client.execute(`
       CREATE TABLE IF NOT EXISTS activity_daily (
@@ -392,6 +419,9 @@ export async function getCategories(client: Client): Promise<Category[]> {
         c.name,
         c.slug,
         c.status,
+        c.seo_title,
+        c.seo_description,
+        c.seo_keywords,
         c.created_at,
         c.updated_at,
         COUNT(t.id) as item_count
@@ -406,6 +436,9 @@ export async function getCategories(client: Client): Promise<Category[]> {
       name: String(row.name),
       slug: String(row.slug),
       status: (row.status === 'inactive' ? 'inactive' : 'active') as 'active' | 'inactive',
+      seo_title: String(row.seo_title || ''),
+      seo_description: String(row.seo_description || ''),
+      seo_keywords: String(row.seo_keywords || ''),
       item_count: Number(row.item_count || 0),
       created_at: String(row.created_at),
       updated_at: String(row.updated_at),
@@ -505,12 +538,15 @@ export async function getDailyActivityAggregates(
 
 export async function saveCategory(
   client: Client,
-  data: { id?: string; name: string; slug: string; status?: 'active' | 'inactive' }
+  data: { id?: string; name: string; slug: string; status?: 'active' | 'inactive'; seo_title?: string; seo_description?: string; seo_keywords?: string }
 ): Promise<Category> {
   const now = nowIso();
   const cleanName = data.name.trim();
   const cleanSlug = data.slug.trim().toLowerCase().replace(/[^a-z0-9]/g, '-');
   const status = data.status || 'active';
+  const seoTitle = String(data.seo_title || '').trim().slice(0, 70);
+  const seoDescription = String(data.seo_description || '').trim().slice(0, 160);
+  const seoKeywords = String(data.seo_keywords || '').trim().slice(0, 255);
 
   let savedCat: Category;
   if (data.id) {
@@ -521,6 +557,9 @@ export async function saveCategory(
         name: cleanName,
         slug: cleanSlug,
         status,
+        seo_title: seoTitle,
+        seo_description: seoDescription,
+        seo_keywords: seoKeywords,
         updated_at: now,
       };
       savedCat = mockCategories[existingIdx];
@@ -530,6 +569,9 @@ export async function saveCategory(
         name: cleanName,
         slug: cleanSlug,
         status,
+        seo_title: seoTitle,
+        seo_description: seoDescription,
+        seo_keywords: seoKeywords,
         item_count: 0,
         created_at: now,
         updated_at: now,
@@ -542,6 +584,9 @@ export async function saveCategory(
       name: cleanName,
       slug: cleanSlug,
       status,
+      seo_title: seoTitle,
+      seo_description: seoDescription,
+      seo_keywords: seoKeywords,
       item_count: 0,
       created_at: now,
       updated_at: now,
@@ -555,13 +600,13 @@ export async function saveCategory(
     await initTursoSchema(client);
     if (data.id) {
       await client.execute({
-        sql: `UPDATE categories SET name = ?, slug = ?, status = ?, updated_at = ? WHERE id = ?`,
-        args: [cleanName, cleanSlug, status, now, data.id],
+        sql: `UPDATE categories SET name = ?, slug = ?, status = ?, seo_title = ?, seo_description = ?, seo_keywords = ?, updated_at = ? WHERE id = ?`,
+        args: [cleanName, cleanSlug, status, seoTitle, seoDescription, seoKeywords, now, data.id],
       });
     } else {
       await client.execute({
-        sql: `INSERT INTO categories (id, name, slug, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-        args: [savedCat.id, cleanName, cleanSlug, status, now, now],
+        sql: `INSERT INTO categories (id, name, slug, status, seo_title, seo_description, seo_keywords, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [savedCat.id, cleanName, cleanSlug, status, seoTitle, seoDescription, seoKeywords, now, now],
       });
     }
   } catch (err) {
@@ -855,6 +900,9 @@ export async function getTemplates(
         category: String(row.category || 'General'),
         tags: parseTags(row.tags),
         description: String(row.description || ''),
+        seo_title: String(row.seo_title || ''),
+        seo_description: String(row.seo_description || ''),
+        seo_keywords: String(row.seo_keywords || ''),
         html_content: html,
         r2_key: row.r2_key ? String(row.r2_key) : null,
         r2_url: row.r2_url ? String(row.r2_url) : null,
@@ -952,6 +1000,9 @@ export async function getPublicTemplateMetadata(
         category: String(row.category || 'General'),
         tags: parseTags(row.tags),
         description: String(row.description || ''),
+        seo_title: String(row.seo_title || ''),
+        seo_description: String(row.seo_description || ''),
+        seo_keywords: String(row.seo_keywords || ''),
         r2_key: row.r2_key ? String(row.r2_key) : null,
         r2_url: row.r2_url ? String(row.r2_url) : null,
         file_size: Number(row.file_size || 0),
@@ -1000,6 +1051,9 @@ export async function getTemplateBySlug(client: Client, slug: string): Promise<H
       category: String(row.category || 'General'),
       tags: parseTags(row.tags),
       description: String(row.description || ''),
+      seo_title: String(row.seo_title || ''),
+      seo_description: String(row.seo_description || ''),
+      seo_keywords: String(row.seo_keywords || ''),
       html_content: cleanHtml,
       r2_key: row.r2_key ? String(row.r2_key) : null,
       r2_url: row.r2_url ? String(row.r2_url) : null,
@@ -1024,6 +1078,9 @@ export async function saveTemplate(
     category: string;
     tags: string[];
     description?: string;
+    seo_title?: string;
+    seo_description?: string;
+    seo_keywords?: string;
     html_content: string;
     r2_key?: string | null;
     r2_url?: string | null;
@@ -1036,7 +1093,7 @@ export async function saveTemplate(
 
   const existingIdx = mockTemplates.findIndex((t) => t.id === id || t.slug === data.slug);
   const current = existingIdx === -1 ? undefined : mockTemplates[existingIdx];
-  const makeSaved = (targetId: string, existing?: { downloads?: number; views?: number; created_at?: string; description?: string }): HtmlTemplate => ({
+  const makeSaved = (targetId: string, existing?: { downloads?: number; views?: number; created_at?: string; description?: string; seo_title?: string; seo_description?: string; seo_keywords?: string }): HtmlTemplate => ({
     id: targetId,
     title: data.title,
     slug: data.slug,
@@ -1045,6 +1102,9 @@ export async function saveTemplate(
     description: data.description !== undefined
       ? data.description.trim()
       : existing?.description ?? current?.description ?? '',
+    seo_title: data.seo_title !== undefined ? data.seo_title.trim().slice(0, 70) : existing?.seo_title ?? current?.seo_title ?? '',
+    seo_description: data.seo_description !== undefined ? data.seo_description.trim().slice(0, 160) : existing?.seo_description ?? current?.seo_description ?? '',
+    seo_keywords: data.seo_keywords !== undefined ? data.seo_keywords.trim().slice(0, 255) : existing?.seo_keywords ?? current?.seo_keywords ?? '',
     html_content: data.html_content,
     r2_key: data.r2_key !== undefined ? data.r2_key : current?.r2_key || null,
     r2_url: data.r2_url !== undefined ? data.r2_url : current?.r2_url || null,
@@ -1075,7 +1135,7 @@ export async function saveTemplate(
 
     const tagsJson = JSON.stringify(data.tags || []);
     const existing = await client.execute({
-      sql: 'SELECT id, downloads, views, created_at, description FROM templates WHERE id = ? OR slug = ? LIMIT 1',
+      sql: 'SELECT id, downloads, views, created_at, description, seo_title, seo_description, seo_keywords FROM templates WHERE id = ? OR slug = ? LIMIT 1',
       args: [id, data.slug],
     });
     const existingRow = existing.rows[0] as any;
@@ -1084,14 +1144,14 @@ export async function saveTemplate(
     const templateStatement = existingRow
       ? {
           sql: `UPDATE templates
-                SET title = ?, slug = ?, category = ?, tags = ?, description = ?, html_content = ?, r2_key = ?, r2_url = ?, file_size = ?, updated_at = ?
+                    SET title = ?, slug = ?, category = ?, tags = ?, description = ?, seo_title = ?, seo_description = ?, seo_keywords = ?, html_content = ?, r2_key = ?, r2_url = ?, file_size = ?, updated_at = ?
                 WHERE id = ?`,
-          args: [data.title, data.slug, data.category, tagsJson, saved.description || '', data.html_content, saved.r2_key, saved.r2_url, fileSize, now, targetId],
+                  args: [data.title, data.slug, data.category, tagsJson, saved.description || '', saved.seo_title, saved.seo_description, saved.seo_keywords, data.html_content, saved.r2_key, saved.r2_url, fileSize, now, targetId],
         }
       : {
-          sql: `INSERT INTO templates (id, title, slug, category, tags, description, html_content, r2_key, r2_url, file_size, downloads, views, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`,
-          args: [targetId, data.title, data.slug, data.category, tagsJson, saved.description || '', data.html_content, saved.r2_key, saved.r2_url, fileSize, now, now],
+                  sql: `INSERT INTO templates (id, title, slug, category, tags, description, seo_title, seo_description, seo_keywords, html_content, r2_key, r2_url, file_size, downloads, views, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`,
+                  args: [targetId, data.title, data.slug, data.category, tagsJson, saved.description || '', saved.seo_title, saved.seo_description, saved.seo_keywords, data.html_content, saved.r2_key, saved.r2_url, fileSize, now, now],
         };
 
     if (syncObjectKey) {
@@ -1447,6 +1507,9 @@ export async function getSiteSettings(client: Client): Promise<SiteSettings> {
   const defaultSettings: SiteSettings = {
     site_name: mockSettings.site_name || 'Free HTML Templates',
     site_description: mockSettings.site_description || 'Browse free HTML templates and responsive website components. Preview designs, inspect source code, and download HTML snippets to customize for your project.',
+    seo_title: mockSettings.seo_title || '',
+    seo_description: mockSettings.seo_description || '',
+    seo_keywords: mockSettings.seo_keywords || '',
     app_logo: mockSettings.app_logo || '',
     favicon_url: mockSettings.favicon_url || '',
     og_image: mockSettings.og_image || '',
@@ -1460,7 +1523,7 @@ export async function getSiteSettings(client: Client): Promise<SiteSettings> {
   try {
     await initTursoSchema(client);
     const res = await client.execute({
-      sql: `SELECT key, value FROM settings WHERE key IN ('site_name', 'site_description', 'app_logo', 'favicon_url', 'og_image', 'dev_mode')`,
+      sql: `SELECT key, value FROM settings WHERE key IN ('site_name', 'site_description', 'seo_title', 'seo_description', 'seo_keywords', 'app_logo', 'favicon_url', 'og_image', 'dev_mode')`,
     });
     const map: Record<string, string> = {};
     for (const row of res.rows) {
@@ -1469,6 +1532,9 @@ export async function getSiteSettings(client: Client): Promise<SiteSettings> {
     return {
       site_name: map.site_name || defaultSettings.site_name,
       site_description: map.site_description || defaultSettings.site_description,
+      seo_title: map.seo_title ?? defaultSettings.seo_title,
+      seo_description: map.seo_description ?? defaultSettings.seo_description,
+      seo_keywords: map.seo_keywords ?? defaultSettings.seo_keywords,
       app_logo: map.app_logo || defaultSettings.app_logo,
       favicon_url: map.favicon_url || defaultSettings.favicon_url,
       og_image: map.og_image || defaultSettings.og_image,
@@ -1484,7 +1550,7 @@ export async function saveSiteSettings(
   client: Client,
   settings: Partial<SiteSettings>
 ): Promise<SiteSettings> {
-  const keys: (keyof SiteSettings)[] = ['site_name', 'site_description', 'app_logo', 'favicon_url', 'og_image', 'dev_mode'];
+  const keys: (keyof SiteSettings)[] = ['site_name', 'site_description', 'seo_title', 'seo_description', 'seo_keywords', 'app_logo', 'favicon_url', 'og_image', 'dev_mode'];
   for (const k of keys) {
     if (settings[k] !== undefined) {
       mockSettings[k] = String(settings[k] ?? '');

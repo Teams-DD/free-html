@@ -101,13 +101,13 @@
 
 **Approval:** The user's 2026-10-16 request explicitly authorizes this SEO implementation, extending the earlier Phase 6 crawler-infrastructure exclusion only for the scope below.
 
-**In scope:** optimize static and client-updated title/description/canonical/social metadata; add robots, a canonical sitemap, structured application/site/FAQ data, visible workflow/features/privacy/FAQ content, and favicon/manifest/social assets; align default public and Admin settings.
+**In scope:** optimize static and client-updated title/description/keywords/canonical/social metadata; add robots, a canonical sitemap, structured application/site/FAQ data, visible workflow/features/privacy/FAQ content, and favicon/manifest/social assets; allow Admin edits for homepage, category, and template SEO fields; generate compact metadata when overrides are blank; align default public and Admin settings.
 
 **Out of scope:** SSR/prerendering, database-derived sitemap generation, Pages deep-link/fallback changes, production deployment, Search Console submission, and production settings/data changes. Use `html.vibid.my` as canonical; do not assert that the alternate host redirects to it.
 
-**Source acceptance:** initial HTML has metadata and JSON-LD; route-aware metadata follows public catalog routes; on-page FAQ text matches FAQ JSON-LD; crawl assets exist; no unsupported zero-storage or universal responsiveness claims are made. Runtime crawler, direct Pages route, social-preview, and rich-result validation remain pending.
+**Source acceptance:** initial HTML has metadata and JSON-LD; route-aware metadata follows public catalog routes; homepage/category/template SEO values round-trip through Admin/API/storage; blank overrides generate bounded title/description/keywords; existing Turso tables gain only missing SEO columns; on-page FAQ text matches FAQ JSON-LD; crawl assets exist; no unsupported zero-storage or universal responsiveness claims are made. Live DB migration, crawler, direct Pages route, social-preview, and rich-result validation remain pending.
 
-**Progress (2026-10-16):** source adds `index.html` metadata/schema, public route-aware metadata and content, SEO-aligned default settings, and `robots.txt`, `sitemap.xml`, `site.webmanifest`, SVG favicon/apple-touch/social assets. Sitemap intentionally lists only `/`; database-driven item/category URLs are not enumerated. Initial diagnostics passed for the public app/settings slice. Full build and live validation remain pending; no deployment or production setting change was performed.
+**Progress (2026-10-16):** source adds `index.html` metadata/schema, public route-aware metadata and content, SEO-aligned default settings, and `robots.txt`, `sitemap.xml`, `site.webmanifest`, SVG favicon/apple-touch/social assets. The follow-up adds Admin fields for home/category/template SEO, a shared fallback/length normalizer, API validation, and idempotent additive SEO columns for existing category/template tables. Sitemap intentionally lists only `/`; database-driven item/category URLs are not enumerated. Diagnostics and focused metadata assertions pass; full build and live DB/browser validation remain pending. No migration was run against the live DB, and no deployment or production setting change was performed.
 
 ## Dependency Order and Current Gate
 

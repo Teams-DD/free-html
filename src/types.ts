@@ -5,6 +5,9 @@ export interface HtmlTemplate {
   category: string;
   tags: string[];
   description?: string;
+  seo_title?: string;
+  seo_description?: string;
+  seo_keywords?: string;
   html_content: string;
   r2_key?: string | null;
   r2_url?: string | null;
@@ -22,6 +25,9 @@ export interface Category {
   name: string;
   slug: string;
   status: 'active' | 'inactive';
+  seo_title?: string;
+  seo_description?: string;
+  seo_keywords?: string;
   item_count?: number;
   created_at: string;
   updated_at: string;
@@ -70,6 +76,9 @@ export interface SystemStatus {
 export interface SiteSettings {
   site_name: string;
   site_description: string;
+  seo_title: string;
+  seo_description: string;
+  seo_keywords: string;
   app_logo: string;
   favicon_url: string;
   og_image: string;

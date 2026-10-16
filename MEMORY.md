@@ -29,7 +29,7 @@ Source facts and runtime/deployment evidence must remain distinct. Detailed proj
 
 ## Storage and Operations
 
-- SEO Phase 8 adds route-aware metadata, the `html.vibid.my` canonical host, static WebApplication/WebSite/Organization/FAQ structured data, visible workflow/privacy/FAQ content, and crawl/icon/social assets. The static sitemap lists only `/` because template/category inventories are database-driven. Cloudflare deep links, crawlers, and social previews remain unverified; see the roadmap and implementation status.
+- SEO Phase 8 adds route-aware metadata, the `html.vibid.my` canonical host, static WebApplication/WebSite/Organization/FAQ structured data, visible workflow/privacy/FAQ content, and crawl/icon/social assets. Admin now edits homepage, category, and template SEO title/description/keywords; empty values generate compact route-specific defaults. Category/template SEO columns are additive Turso migrations. The static sitemap lists only `/` because inventories are database-driven. Live DB migration, Cloudflare deep links, crawlers, and social previews remain unverified; see the roadmap and implementation status.
 
 - Turso is metadata/template-content storage; R2 stores objects/assets. Source has durable template sync jobs for real Turso. Deployed DB-backed routes now fail closed instead of using mock persistence. Mock memory mode cannot persist jobs; deployed behavior is unverified.
 - `/api/status` source reuses a 30-second isolate-local result; production impact is unmeasured.
@@ -38,7 +38,7 @@ Source facts and runtime/deployment evidence must remain distinct. Detailed proj
 
 ## Verification and Workflow
 
-- `npm run lint` is the TypeScript check, `npm run build` is the Vite build. No automated test script exists.
+- `npm run lint` is the TypeScript check, `npm run build` is the Vite build. No automated test script exists. Installed Windows dependencies currently lack TypeScript, Rolldown, and libSQL optional native packages, blocking lint/build and direct persistence integration checks.
 - Workspace diagnostics reported no errors. Phase 1 `npm ci --ignore-scripts` completed, but lockfile-based Windows install omits the TypeScript and Rolldown Windows optional binaries; `npm run lint` and `npm run build` stop before source validation. Lockfile-only generation and lockfile-enabled `npm install --no-save` did not repair this. No test script is defined.
 - `.env` and `.dev.vars` are absent. Wrangler is unauthenticated and no isolated staging target exists. Browser, live Turso/R2, Cloudflare direct paths, staging, and production behavior are unverified.
 - User workflow is code-first: defer staging/Wrangler/assistant deployment; after approved code phases, GitHub push and Cloudflare auto-rebuild are followed by the user's live test. Phase 5 verification is deferred; Phase 6 is implemented in source; Phase 7 release approval remains separate.

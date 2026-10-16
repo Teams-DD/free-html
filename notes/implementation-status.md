@@ -13,7 +13,7 @@
 - Card previews use lazy raw-HTML iframes with an on-load indicator. Modal preview/code, desktop/tablet/mobile modes, copy, download, X/Escape close exist.
 - Modal URLs use `/{slug}?opened` and `/{slug}?closed`; direct opened routes resolve after metadata load; `popstate` synchronizes Back/Forward. `/vcon` remains Admin except the legacy public modal query route.
 - Per-template description is present in the shared model, Admin editor, API, Turso migration/read/write, and public metadata. Browser title/description update client-side; Open Graph image stays site-level.
-- SEO Phase 8 adds initial and route-aware metadata, a primary-host canonical, WebApplication/WebSite/Organization/FAQ JSON-LD, matching visible help/privacy/FAQ content, and robots/sitemap/manifest/favicon/social assets. Only `/` is in the static sitemap; crawler, Pages deep-route, and social-card behavior are unverified.
+- SEO Phase 8 adds initial and route-aware metadata, a primary-host canonical, WebApplication/WebSite/Organization/FAQ JSON-LD, matching visible help/privacy/FAQ content, and robots/sitemap/manifest/favicon/social assets. Admin edits homepage, category, and template SEO fields; blank overrides generate bounded defaults. Category/template columns are migrated additively at schema initialization. Only `/` is in the static sitemap; live migration, crawler, Pages deep-route, and social-card behavior are unverified.
 - Admin setup/login, template/category/settings management, Turso/R2 tools, sync-job management, and deployment instructions exist in source.
 - Public category URLs resolve active category slugs; existing category labels/filter behavior and layout remain. Daily aggregate activity source exists; runtime persistence is unverified.
 
@@ -71,6 +71,9 @@
 - Added `public/robots.txt`, `public/sitemap.xml`, `public/site.webmanifest`, `public/favicon.svg`, `public/apple-touch-icon.svg`, and `public/og-image.svg`. The sitemap lists only `/` because template/category data is dynamic and Cloudflare Pages direct-path handling is unverified.
 - Updated public API, Turso fallback, and Admin settings defaults. No database setting was changed; existing customized settings remain intact.
 - Initial diagnostics passed for `PublicApp.tsx`, `turso.ts`, `SettingsManager.tsx`, and `apiHandler.ts`. Build, metadata/schema validators, live deep links, Google Search Console, and social crawler behavior remain unverified. No deployment or production mutation occurred.
+- Follow-up adds editable homepage/category/template SEO title, description, and keywords. API writes are length-bounded; blank values use generated, compact metadata derived from site/category/template fields. Existing template `description` remains available as the template SEO-description fallback.
+- Turso schema initialization adds only missing `seo_title`, `seo_description`, and `seo_keywords` columns on templates/categories; reads, writes, and public category/template metadata include those fields. This migration code has not run against a live DB.
+- Diagnostics pass across all touched TypeScript files; focused Node checks pass for legacy/current home, category/template defaults, explicit overrides, and size limits. A mock storage integration check is blocked by missing `@libsql/win32-x64-msvc`; `npm run lint` and `npm run build` remain blocked by missing TypeScript/Rolldown Windows optional binaries. No production DB change or deployment occurred.
 
 ## Admin Tab Refresh Fix (2026-10-16)
 

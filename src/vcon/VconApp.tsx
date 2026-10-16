@@ -210,6 +210,9 @@ const VconAppContent: React.FC = () => {
     name: string;
     slug: string;
     status?: 'active' | 'inactive';
+    seo_title?: string;
+    seo_description?: string;
+    seo_keywords?: string;
   }) => {
     const res = await fetch('/api/vcon/categories', {
       method: 'POST',
@@ -315,6 +318,9 @@ const VconAppContent: React.FC = () => {
     category: string;
     tags: string[];
     description: string;
+    seo_title: string;
+    seo_description: string;
+    seo_keywords: string;
     html_content: string;
   }) => {
     const res = await fetch('/api/vcon/templates', {

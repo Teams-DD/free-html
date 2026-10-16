@@ -29,6 +29,9 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
   // Site Branding State
   const [siteName, setSiteName] = useState('Free HTML Templates');
   const [siteDescription, setSiteDescription] = useState('Browse free HTML templates and responsive website components. Preview designs, inspect source code, and download HTML snippets to customize for your project.');
+  const [seoTitle, setSeoTitle] = useState('');
+  const [seoDescription, setSeoDescription] = useState('');
+  const [seoKeywords, setSeoKeywords] = useState('');
   const [appLogo, setAppLogo] = useState('');
   const [faviconUrl, setFaviconUrl] = useState('');
   const [ogImage, setOgImage] = useState('');
@@ -73,6 +76,9 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
       if (res.ok && data.success && data.settings) {
         setSiteName(data.settings.site_name || 'Free HTML Templates');
         setSiteDescription(data.settings.site_description || '');
+        setSeoTitle(data.settings.seo_title || '');
+        setSeoDescription(data.settings.seo_description || '');
+        setSeoKeywords(data.settings.seo_keywords || '');
         setAppLogo(data.settings.app_logo || '');
         setFaviconUrl(data.settings.favicon_url || '');
         setOgImage(data.settings.og_image || '');
@@ -124,6 +130,9 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
         body: JSON.stringify({
           site_name: siteName.trim(),
           site_description: siteDescription.trim(),
+          seo_title: seoTitle.trim(),
+          seo_description: seoDescription.trim(),
+          seo_keywords: seoKeywords.trim(),
           app_logo: appLogo.trim(),
           favicon_url: faviconUrl.trim(),
           og_image: ogImage.trim(),
@@ -412,6 +421,44 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
                   placeholder="Meta description for search engines"
                   className="w-full px-2.5 py-1.5 bg-[#0c0d10] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47] resize-none"
                 />
+              </div>
+
+              <div className="border-t border-[#1c1d22] pt-3 space-y-3">
+                <span className="block text-[10px] font-semibold text-zinc-300 uppercase tracking-wider">Homepage SEO Metadata</span>
+                <div>
+                  <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">SEO Title</label>
+                  <input
+                    type="text"
+                    maxLength={70}
+                    value={seoTitle}
+                    onChange={(event) => setSeoTitle(event.target.value)}
+                    placeholder="Generated from site name"
+                    className="w-full px-2.5 py-1.5 bg-[#0c0d10] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">SEO Description</label>
+                  <textarea
+                    value={seoDescription}
+                    onChange={(event) => setSeoDescription(event.target.value)}
+                    rows={2}
+                    maxLength={160}
+                    placeholder="Generated from site description"
+                    className="w-full px-2.5 py-1.5 bg-[#0c0d10] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47] resize-y"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">SEO Keywords (comma-separated)</label>
+                  <input
+                    type="text"
+                    maxLength={255}
+                    value={seoKeywords}
+                    onChange={(event) => setSeoKeywords(event.target.value)}
+                    placeholder="Generated default keywords"
+                    className="w-full px-2.5 py-1.5 bg-[#0c0d10] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47]"
+                  />
+                </div>
+                <p className="text-[10px] text-zinc-500">Leave a field blank to use generated homepage metadata.</p>
               </div>
 
               <label className="flex items-center justify-between gap-4 border-t border-[#1c1d22] pt-3">

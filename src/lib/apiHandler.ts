@@ -438,6 +438,9 @@ async function handleApiRequestInternal(req: Request, env?: Record<string, any>)
         settings: {
           site_name: 'Free HTML Templates',
           site_description: 'Browse free HTML templates and responsive website components. Preview designs, inspect source code, and download HTML snippets to customize for your project.',
+          seo_title: '',
+          seo_description: '',
+          seo_keywords: '',
           app_logo: '',
           favicon_url: '',
           og_image: '',
@@ -909,11 +912,19 @@ async function handleApiRequestInternal(req: Request, env?: Record<string, any>)
     if (pathname === '/api/vcon/categories' && method === 'POST') {
       if (!tursoClient) return json({ success: false, error: 'Database not configured.' }, 503);
       const body: any = await req.json();
-      const { id, name, slug, status } = body;
+      const { id, name, slug, status, seo_title, seo_description, seo_keywords } = body;
       if (!name || !name.trim()) return json({ success: false, error: 'Category name is required' }, 400);
       const { saveCategory } = await import('./turso.ts');
       const cleanSlug = (slug || name).trim().toLowerCase().replace(/[^a-z0-9]/g, '-');
-      const item = await saveCategory(tursoClient, { id, name: name.trim(), slug: cleanSlug, status });
+      const item = await saveCategory(tursoClient, {
+        id,
+        name: name.trim(),
+        slug: cleanSlug,
+        status,
+        seo_title: typeof seo_title === 'string' ? seo_title.trim().slice(0, 70) : undefined,
+        seo_description: typeof seo_description === 'string' ? seo_description.trim().slice(0, 160) : undefined,
+        seo_keywords: typeof seo_keywords === 'string' ? seo_keywords.trim().slice(0, 255) : undefined,
+      });
       return json({ success: true, item });
     }
 
@@ -1014,7 +1025,7 @@ async function handleApiRequestInternal(req: Request, env?: Record<string, any>)
 
       try {
         const body: any = await req.json();
-        const { id, title, slug, category, tags, description, html_content } = body;
+        const { id, title, slug, category, tags, description, seo_title, seo_description, seo_keywords, html_content } = body;
 
         if (!title || !slug || !html_content) {
           return json({ success: false, error: 'Title, slug, and html_content are required.' }, 400);
@@ -1035,6 +1046,9 @@ async function handleApiRequestInternal(req: Request, env?: Record<string, any>)
           category: categoryName,
           tags: Array.isArray(tags) ? tags : [],
           description: typeof description === 'string' ? description.trim() : undefined,
+          seo_title: typeof seo_title === 'string' ? seo_title.trim().slice(0, 70) : undefined,
+          seo_description: typeof seo_description === 'string' ? seo_description.trim().slice(0, 160) : undefined,
+          seo_keywords: typeof seo_keywords === 'string' ? seo_keywords.trim().slice(0, 255) : undefined,
           html_content,
           r2_key: r2Key,
           r2_url: getR2ObjectUrl(r2Key, r2PublicDomain),
@@ -1096,6 +1110,9 @@ async function handleApiRequestInternal(req: Request, env?: Record<string, any>)
         const settings = await saveSiteSettings(tursoClient, {
           site_name: body.site_name,
           site_description: body.site_description,
+          seo_title: typeof body.seo_title === 'string' ? body.seo_title.trim().slice(0, 70) : undefined,
+          seo_description: typeof body.seo_description === 'string' ? body.seo_description.trim().slice(0, 160) : undefined,
+          seo_keywords: typeof body.seo_keywords === 'string' ? body.seo_keywords.trim().slice(0, 255) : undefined,
           app_logo: body.app_logo,
           favicon_url: body.favicon_url,
           og_image: body.og_image,

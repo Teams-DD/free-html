@@ -21,6 +21,9 @@ interface Props {
     category: string;
     tags: string[];
     description: string;
+    seo_title: string;
+    seo_description: string;
+    seo_keywords: string;
     html_content: string;
   }) => Promise<{ success: boolean; error?: string; r2Uploaded?: boolean }>;
   onBulkUpload?: (
@@ -70,6 +73,9 @@ export const TemplateCreateEdit: React.FC<Props> = ({
   const [category, setCategory] = useState(initialTemplate?.category || '');
   const [tagsInput, setTagsInput] = useState(initialTemplate?.tags.join(', ') || '');
   const [description, setDescription] = useState(initialTemplate?.description || '');
+  const [seoTitle, setSeoTitle] = useState(initialTemplate?.seo_title || '');
+  const [seoDescription, setSeoDescription] = useState(initialTemplate?.seo_description || '');
+  const [seoKeywords, setSeoKeywords] = useState(initialTemplate?.seo_keywords || '');
   const [htmlContent, setHtmlContent] = useState(initialTemplate?.html_content || DEFAULT_HTML);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -205,6 +211,9 @@ export const TemplateCreateEdit: React.FC<Props> = ({
         category,
         tags,
         description: description.trim(),
+        seo_title: seoTitle.trim(),
+        seo_description: seoDescription.trim(),
+        seo_keywords: seoKeywords.trim(),
         html_content: htmlContent,
       });
 
@@ -474,15 +483,53 @@ export const TemplateCreateEdit: React.FC<Props> = ({
 
             <div className="sm:col-span-4">
               <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">
-                SEO Description (optional)
+                Template Description (optional)
               </label>
               <textarea
                 rows={2}
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
-                placeholder="Short description for this template"
+                placeholder="Short summary; used as the SEO description when no override is set"
                 className="w-full px-2.5 py-1.5 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47] resize-y"
               />
+            </div>
+
+            <div className="sm:col-span-4 border-t border-[#1c1d22] pt-3 space-y-3">
+              <span className="block text-[10px] font-semibold text-zinc-300 uppercase tracking-wider">SEO Metadata</span>
+              <div>
+                <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">SEO Title</label>
+                <input
+                  type="text"
+                  maxLength={70}
+                  value={seoTitle}
+                  onChange={(event) => setSeoTitle(event.target.value)}
+                  placeholder={title ? `${title} HTML Template | Vib Tools` : 'Generated from template title'}
+                  className="w-full px-2.5 py-1 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47]"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">SEO Description</label>
+                <textarea
+                  rows={2}
+                  maxLength={160}
+                  value={seoDescription}
+                  onChange={(event) => setSeoDescription(event.target.value)}
+                  placeholder="Generated from template title, category, and description"
+                  className="w-full px-2.5 py-1.5 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47] resize-y"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">SEO Keywords (comma-separated)</label>
+                <input
+                  type="text"
+                  maxLength={255}
+                  value={seoKeywords}
+                  onChange={(event) => setSeoKeywords(event.target.value)}
+                  placeholder="Generated from title, category, and tags"
+                  className="w-full px-2.5 py-1 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47]"
+                />
+              </div>
+              <p className="text-[10px] text-zinc-500">Leave blank to generate compact metadata automatically.</p>
             </div>
           </div>
 

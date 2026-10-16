@@ -16,6 +16,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { Category, PublicTemplateMetadata, SiteSettings } from '../types.ts';
+import { getCategorySeoMetadata, getHomeSeoMetadata, getTemplateSeoMetadata } from '../lib/seo.ts';
 import { DevLogEntry, DevLogPanel } from './DevLogPanel.tsx';
 
 const rawTemplateUrl = (slug: string, hideScrollbars = false) =>
@@ -75,6 +76,9 @@ export const PublicApp: React.FC = () => {
   const [settings, setSettings] = useState<SiteSettings>({
     site_name: 'Free HTML Templates',
     site_description: DEFAULT_SITE_DESCRIPTION,
+    seo_title: '',
+    seo_description: '',
+    seo_keywords: '',
     app_logo: '',
     favicon_url: '',
     og_image: '',
@@ -514,16 +518,14 @@ export const PublicApp: React.FC = () => {
   }, [loadCategories, loadTemplates]);
 
   useEffect(() => {
-    const configuredSiteName = settings.site_name === 'HTML Snippets & Templates'
-      ? 'Free HTML Templates'
-      : settings.site_name || 'Free HTML Templates';
-    const title = activeModal
-      ? `${activeModal.title} | Free HTML Templates`
-      : `${configuredSiteName} | Vib Tools`;
-    const configuredDescription = settings.site_description === 'Free responsive HTML snippets and component templates directory.'
-      ? DEFAULT_SITE_DESCRIPTION
-      : settings.site_description;
-    const description = activeModal?.description?.trim() || configuredDescription || DEFAULT_SITE_DESCRIPTION;
+    const activeCategory = selectedCategory !== 'all' && selectedCategory !== '__popular__'
+      ? publicCategories.find((item) => item.name === selectedCategory && item.status === 'active')
+      : undefined;
+    const metadata = activeModal
+      ? getTemplateSeoMetadata(activeModal)
+      : activeCategory
+      ? getCategorySeoMetadata(activeCategory)
+      : getHomeSeoMetadata(settings);
     const pathname = window.location.pathname;
     let canonicalPath = '/';
     if (activeModal) {
@@ -541,18 +543,19 @@ export const PublicApp: React.FC = () => {
     }
     const canonicalUrl = `${CANONICAL_ORIGIN}${canonicalPath}`;
     const socialImage = settings.og_image || `${CANONICAL_ORIGIN}/og-image.svg`;
-    document.title = title;
+    document.title = metadata.title;
 
     document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.setAttribute('href', canonicalUrl);
-    document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute('content', description);
-    document.querySelector<HTMLMetaElement>('meta[property="og:title"]')?.setAttribute('content', title);
-    document.querySelector<HTMLMetaElement>('meta[property="og:description"]')?.setAttribute('content', description);
+    document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute('content', metadata.description);
+    document.querySelector<HTMLMetaElement>('meta[name="keywords"]')?.setAttribute('content', metadata.keywords);
+    document.querySelector<HTMLMetaElement>('meta[property="og:title"]')?.setAttribute('content', metadata.title);
+    document.querySelector<HTMLMetaElement>('meta[property="og:description"]')?.setAttribute('content', metadata.description);
     document.querySelector<HTMLMetaElement>('meta[property="og:url"]')?.setAttribute('content', canonicalUrl);
     document.querySelector<HTMLMetaElement>('meta[property="og:image"]')?.setAttribute('content', socialImage);
-    document.querySelector<HTMLMetaElement>('meta[name="twitter:title"]')?.setAttribute('content', title);
-    document.querySelector<HTMLMetaElement>('meta[name="twitter:description"]')?.setAttribute('content', description);
+    document.querySelector<HTMLMetaElement>('meta[name="twitter:title"]')?.setAttribute('content', metadata.title);
+    document.querySelector<HTMLMetaElement>('meta[name="twitter:description"]')?.setAttribute('content', metadata.description);
     document.querySelector<HTMLMetaElement>('meta[name="twitter:image"]')?.setAttribute('content', socialImage);
-  }, [activeModal, publicCategories, settings.og_image, settings.site_description, settings.site_name]);
+  }, [activeModal, publicCategories, selectedCategory, settings, settings.og_image]);
 
   useEffect(() => {
     if (!settings.dev_mode) return;

@@ -19,7 +19,7 @@ interface Props {
   categories: Category[];
   loading: boolean;
   onRefresh: () => void;
-  onSaveCategory: (data: { id?: string; name: string; slug: string; status?: 'active' | 'inactive' }) => Promise<{ success: boolean; error?: string }>;
+  onSaveCategory: (data: { id?: string; name: string; slug: string; status?: 'active' | 'inactive'; seo_title?: string; seo_description?: string; seo_keywords?: string }) => Promise<{ success: boolean; error?: string }>;
   onToggleStatus: (id: string, status: 'active' | 'inactive') => Promise<boolean>;
   onDeleteCategory: (id: string) => Promise<boolean>;
   onBulkDelete: (ids: string[]) => Promise<void>;
@@ -45,6 +45,9 @@ export const CategoryManager: React.FC<Props> = ({
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [status, setStatus] = useState<'active' | 'inactive'>('active');
+  const [seoTitle, setSeoTitle] = useState('');
+  const [seoDescription, setSeoDescription] = useState('');
+  const [seoKeywords, setSeoKeywords] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,6 +56,9 @@ export const CategoryManager: React.FC<Props> = ({
     setName('');
     setSlug('');
     setStatus('active');
+    setSeoTitle('');
+    setSeoDescription('');
+    setSeoKeywords('');
     setError(null);
     setModalOpen(true);
   };
@@ -62,6 +68,9 @@ export const CategoryManager: React.FC<Props> = ({
     setName(cat.name);
     setSlug(cat.slug);
     setStatus(cat.status);
+    setSeoTitle(cat.seo_title || '');
+    setSeoDescription(cat.seo_description || '');
+    setSeoKeywords(cat.seo_keywords || '');
     setError(null);
     setModalOpen(true);
   };
@@ -85,6 +94,9 @@ export const CategoryManager: React.FC<Props> = ({
       name: name.trim(),
       slug: slug.trim() || name.trim().toLowerCase().replace(/[^a-z0-9]/g, '-'),
       status,
+      seo_title: seoTitle.trim(),
+      seo_description: seoDescription.trim(),
+      seo_keywords: seoKeywords.trim(),
     });
 
     setSubmitting(false);
@@ -325,7 +337,7 @@ export const CategoryManager: React.FC<Props> = ({
       {/* Add / Edit Category Modal */}
       {modalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-3">
-          <div className="bg-[#121317] border border-[#22242b] rounded-md w-full max-w-sm overflow-hidden">
+          <div className="bg-[#121317] border border-[#22242b] rounded-md w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="px-4 py-3 bg-[#0f1013] border-b border-[#1c1d22] flex items-center justify-between">
               <span className="font-semibold text-zinc-200 text-xs">
                 {editingCategory ? 'Edit Category' : 'Add Category'}
@@ -386,6 +398,44 @@ export const CategoryManager: React.FC<Props> = ({
                   <option value="active">Active (Visible)</option>
                   <option value="inactive">Inactive (Hidden)</option>
                 </select>
+              </div>
+
+              <div className="border-t border-[#1c1d22] pt-3 space-y-3">
+                <span className="block text-[10px] font-semibold text-zinc-300 uppercase tracking-wider">SEO Metadata</span>
+                <div>
+                  <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">SEO Title</label>
+                  <input
+                    type="text"
+                    maxLength={70}
+                    value={seoTitle}
+                    onChange={(event) => setSeoTitle(event.target.value)}
+                    placeholder={name ? `${name} HTML Templates | Vib Tools` : 'Generated from category name'}
+                    className="w-full px-2.5 py-1.5 bg-[#0c0d10] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">SEO Description</label>
+                  <textarea
+                    rows={2}
+                    maxLength={160}
+                    value={seoDescription}
+                    onChange={(event) => setSeoDescription(event.target.value)}
+                    placeholder="Generated from the category name when blank"
+                    className="w-full px-2.5 py-1.5 bg-[#0c0d10] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47] resize-y"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">SEO Keywords (comma-separated)</label>
+                  <input
+                    type="text"
+                    maxLength={255}
+                    value={seoKeywords}
+                    onChange={(event) => setSeoKeywords(event.target.value)}
+                    placeholder="Generated from the category name"
+                    className="w-full px-2.5 py-1.5 bg-[#0c0d10] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47]"
+                  />
+                </div>
+                <p className="text-[10px] text-zinc-500">Leave blank to generate compact metadata automatically.</p>
               </div>
 
               <div className="pt-2 flex items-center justify-end space-x-2">
