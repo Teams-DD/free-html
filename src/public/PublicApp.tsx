@@ -581,13 +581,6 @@ export const PublicApp: React.FC = () => {
     else window.history.pushState({ catalogRoute: true }, '', destination);
   };
 
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-      writeCatalogRoute(selectedCategory, totalPages, pageSize);
-    }
-  }, [currentPage, pageSize, selectedCategory, totalPages]);
-
   const selectCategory = (category: string) => {
     const context = catalogContext(category, 1, pageSize);
     const destination = catalogRouteUrl(context);
@@ -639,6 +632,13 @@ export const PublicApp: React.FC = () => {
   const pageSnippets = filteredSnippets.slice(pageStartIndex, pageStartIndex + pageSize);
   const rangeStart = filteredSnippets.length === 0 ? 0 : pageStartIndex + 1;
   const rangeEnd = Math.min(pageStartIndex + pageSize, filteredSnippets.length);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+      writeCatalogRoute(selectedCategory, totalPages, pageSize);
+    }
+  }, [currentPage, pageSize, selectedCategory, totalPages]);
 
   const handleDownload = async (item: PublicTemplateMetadata) => {
     try {

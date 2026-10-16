@@ -69,6 +69,7 @@
 - Aggregate schema stores only day/event/resource slug/count/update time, prunes beyond 90 days, and exposes an authenticated admin read endpoint with a maximum 90-day date range. Public event ingestion validates active slugs and uses transient in-memory IP rate limiting; no IP/user-agent/user ID/search term/per-user history is persisted.
 - Validation: diagnostics clean on `turso.ts`, `apiHandler.ts`, and `PublicApp.tsx`. No browser history, API, migration, retention, rate-limit, or aggregate-counter runtime test was run. No schema migration or production change was executed.
 - Scope preserved: no visible UI redesign/dashboard, no search URL/analytics, no production data/settings, deployment, or cache purge.
+- Post-deploy hotfix: browser console reported `ReferenceError: Cannot access 'dt' before initialization`; minified offset mapped to the clamp effect reading `totalPages` before its declaration. Moved the effect below `totalPages`/pagination calculation. Touched-file diagnostics pass; push/rebuild/live confirmation pending.
 
 ## Workflow Note (2026-10-16)
 

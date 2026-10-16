@@ -66,6 +66,7 @@
 - Added public `POST /api/activity` for `category_view` and `template_open`, with active resource validation and bounded per-minute in-memory request limits. Existing download-counter action adds `download_request` to aggregate storage best-effort.
 - Added additive `activity_daily` table with UTC day/event/slug/count only, 90-day cleanup on write/report read, and authenticated `GET /api/vcon/analytics` with strict date validation and a maximum 90-day range.
 - No user IDs, IPs, user agents, raw search terms, or per-user histories are stored. IP is used transiently for in-memory rate limiting only.
+- Post-deploy crash report identified a TDZ: the pagination clamp effect read `totalPages` before its `const` initialization. The effect is now placed after the pagination calculations. The fix has not yet been rebuilt/deployed or live-tested.
 - Validation: diagnostics reported no errors in `turso.ts`, `apiHandler.ts`, and `PublicApp.tsx`; runtime route, history, rate-limit, schema migration, retention, and event-count behavior remain unverified. No schema migration was executed.
 - Scope: no visible layout redesign, dashboard, production data/settings change, deploy, or cache purge.
 
