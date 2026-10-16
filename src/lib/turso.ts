@@ -91,6 +91,32 @@ function createMockClient(): Client {
 const fallbackMockClient = createMockClient();
 const failedUrlKeys = new Set<string>();
 const schemaInitializedClients = new WeakSet<object>();
+const failClosedTursoClients = new WeakSet<object>();
+const mockActivityDaily = new Map<string, { day: string; event: ActivityEvent; slug: string; count: number }>();
+let lastActivityCleanupDay = '';
+
+export type ActivityEvent = 'category_view' | 'template_open' | 'download_request';
+export interface DailyActivityAggregate {
+  day: string;
+  event: ActivityEvent;
+  slug: string;
+  count: number;
+}
+
+export class TursoPersistenceError extends Error {
+  constructor() {
+    super('Persistent Turso storage is unavailable.');
+    this.name = 'TursoPersistenceError';
+  }
+}
+
+export function enforceTursoPersistence(client: Client): void {
+  failClosedTursoClients.add(client as object);
+}
+
+function throwIfTursoPersistenceMustFail(client: Client): void {
+  if (failClosedTursoClients.has(client as object)) throw new TursoPersistenceError();
+}
 
 export function isPlaceholderTursoUrl(url?: string): boolean {
   if (!url || typeof url !== 'string') return true;
@@ -231,11 +257,23 @@ export async function initTursoSchema(client: Client): Promise<{ success: boolea
       );
     `);
 
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS activity_daily (
+        day TEXT NOT NULL,
+        event TEXT NOT NULL,
+        slug TEXT NOT NULL,
+        count INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (day, event, slug)
+      );
+    `);
+
     await client.execute(`CREATE INDEX IF NOT EXISTS idx_templates_slug ON templates(slug);`);
     await client.execute(`CREATE INDEX IF NOT EXISTS idx_templates_category ON templates(category);`);
     await client.execute(`CREATE INDEX IF NOT EXISTS idx_admins_username ON admins(username);`);
     await client.execute(`CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug);`);
     await client.execute(`CREATE INDEX IF NOT EXISTS idx_categories_status ON categories(status);`);
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_activity_daily_day ON activity_daily(day);`);
 
     const catCheck = await client.execute('SELECT COUNT(*) as count FROM categories');
     if (Number(catCheck.rows[0]?.count || 0) === 0) {
@@ -253,6 +291,7 @@ export async function initTursoSchema(client: Client): Promise<{ success: boolea
     schemaInitializedClients.add(client as object);
     return { success: true, message: 'Database tables "templates", "admins", "settings", and "categories" verified in Turso SQLite.' };
   } catch {
+    throwIfTursoPersistenceMustFail(client);
     (client as any).isMock = true;
     if (cachedConfigKey) {
       failedUrlKeys.add(cachedConfigKey);
@@ -275,6 +314,7 @@ export async function getSetting(client: Client, key: string): Promise<string | 
     if (res.rows.length === 0) return mockSettings[key] ?? null;
     return String(res.rows[0].value);
   } catch {
+    throwIfTursoPersistenceMustFail(client);
     return mockSettings[key] ?? null;
   }
 }
@@ -293,6 +333,7 @@ export async function setSetting(client: Client, key: string, value: string): Pr
       args: [key, value, now],
     });
   } catch (err) {
+    throwIfTursoPersistenceMustFail(client);
     console.warn('Failed to persist setting to Turso:', err);
   }
 }
@@ -309,6 +350,7 @@ export async function deleteSetting(client: Client, key: string): Promise<void> 
       args: [key],
     });
   } catch (err) {
+    throwIfTursoPersistenceMustFail(client);
     console.warn('Failed to delete setting from Turso:', err);
   }
 }
@@ -348,11 +390,96 @@ export async function getCategories(client: Client): Promise<Category[]> {
       updated_at: String(row.updated_at),
     }));
   } catch {
+    throwIfTursoPersistenceMustFail(client);
     return mockCategories.map((c) => ({
       ...c,
       item_count: mockTemplates.filter((t) => t.category.toLowerCase() === c.name.toLowerCase()).length,
     }));
   }
+}
+
+export async function getPublicCategories(client: Client): Promise<Category[]> {
+  const categories = await getCategories(client);
+  return categories.filter((category) => category.status === 'active');
+}
+
+export async function recordActivityEvent(
+  client: Client,
+  event: ActivityEvent,
+  slug: string
+): Promise<void> {
+  const now = new Date();
+  const day = now.toISOString().slice(0, 10);
+  const cutoff = new Date(now.getTime() - 89 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  if (isMockClient(client)) {
+    const key = `${day}:${event}:${slug}`;
+    const current = mockActivityDaily.get(key);
+    mockActivityDaily.set(key, { day, event, slug, count: (current?.count || 0) + 1 });
+    for (const [entryKey, entry] of mockActivityDaily) {
+      if (entry.day < cutoff) mockActivityDaily.delete(entryKey);
+    }
+    return;
+  }
+
+  await initTursoSchema(client);
+  if (isMockClient(client)) {
+    await recordActivityEvent(client, event, slug);
+    return;
+  }
+
+  if (lastActivityCleanupDay !== day) {
+    await client.execute({
+      sql: 'DELETE FROM activity_daily WHERE day < ?',
+      args: [cutoff],
+    });
+    lastActivityCleanupDay = day;
+  }
+
+  await client.execute({
+    sql: `INSERT INTO activity_daily (day, event, slug, count, updated_at)
+          VALUES (?, ?, ?, 1, ?)
+          ON CONFLICT(day, event, slug) DO UPDATE SET count = count + 1, updated_at = excluded.updated_at`,
+    args: [day, event, slug, now.toISOString()],
+  });
+}
+
+export async function getDailyActivityAggregates(
+  client: Client,
+  fromDay: string,
+  toDay: string
+): Promise<DailyActivityAggregate[]> {
+  if (isMockClient(client)) {
+    return Array.from(mockActivityDaily.values())
+      .filter((aggregate) => aggregate.day >= fromDay && aggregate.day <= toDay)
+      .sort((left, right) => left.day.localeCompare(right.day) || left.event.localeCompare(right.event) || left.slug.localeCompare(right.slug));
+  }
+
+  await initTursoSchema(client);
+  if (isMockClient(client)) return getDailyActivityAggregates(client, fromDay, toDay);
+
+  const now = new Date();
+  const day = now.toISOString().slice(0, 10);
+  if (lastActivityCleanupDay !== day) {
+    const cutoff = new Date(now.getTime() - 89 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    await client.execute({
+      sql: 'DELETE FROM activity_daily WHERE day < ?',
+      args: [cutoff],
+    });
+    lastActivityCleanupDay = day;
+  }
+
+  const result = await client.execute({
+    sql: `SELECT day, event, slug, count FROM activity_daily
+          WHERE day >= ? AND day <= ? ORDER BY day ASC, event ASC, slug ASC`,
+    args: [fromDay, toDay],
+  });
+  return result.rows.map((row: any) => ({
+    day: String(row.day),
+    event: String(row.event) as ActivityEvent,
+    slug: String(row.slug),
+    count: Number(row.count || 0),
+  }));
 }
 
 export async function saveCategory(
@@ -417,6 +544,7 @@ export async function saveCategory(
       });
     }
   } catch (err) {
+    throwIfTursoPersistenceMustFail(client);
     console.warn('Failed to save category to Turso:', err);
   }
 
@@ -444,6 +572,7 @@ export async function toggleCategoryStatus(
     });
     return res.rowsAffected > 0;
   } catch {
+    throwIfTursoPersistenceMustFail(client);
     return Boolean(cat);
   }
 }
@@ -462,6 +591,7 @@ export async function deleteCategory(client: Client, id: string): Promise<boolea
     });
     return res.rowsAffected > 0;
   } catch {
+    throwIfTursoPersistenceMustFail(client);
     return mockCategories.length < initialLength;
   }
 }
@@ -476,6 +606,7 @@ export async function countAdmins(client: Client): Promise<number> {
     const res = await client.execute('SELECT COUNT(*) as count FROM admins');
     return Number(res.rows[0]?.count || 0);
   } catch {
+    throwIfTursoPersistenceMustFail(client);
     return mockAdmins.length;
   }
 }
@@ -507,6 +638,7 @@ export async function getAdminByUsername(
       salt: String(row.salt),
     };
   } catch {
+    throwIfTursoPersistenceMustFail(client);
     return mockAdmin || null;
   }
 }
@@ -542,6 +674,7 @@ export async function createAdminUser(
       args: [id, cleanUser, passwordHash, salt, now, now],
     });
   } catch (err) {
+    throwIfTursoPersistenceMustFail(client);
     console.warn('Failed to insert admin into Turso, saved to mock:', err);
   }
 
@@ -712,6 +845,7 @@ export async function getTemplates(
       };
     });
   } catch {
+    throwIfTursoPersistenceMustFail(client);
     return getTemplates(fallbackMockClient, options);
   }
 }
@@ -807,6 +941,7 @@ export async function getPublicTemplateMetadata(
       };
     });
   } catch {
+    throwIfTursoPersistenceMustFail(client);
     return getPublicTemplateMetadata(fallbackMockClient, options);
   }
 }
@@ -854,6 +989,7 @@ export async function getTemplateBySlug(client: Client, slug: string): Promise<H
       updated_at: String(row.updated_at || ''),
     };
   } catch {
+    throwIfTursoPersistenceMustFail(client);
     return mockFound ? { ...mockFound } : null;
   }
 }
@@ -957,6 +1093,7 @@ export async function saveTemplate(
     updateMock(saved);
     return saved;
   } catch (err) {
+    throwIfTursoPersistenceMustFail(client);
     if (syncObjectKey) throw err;
     console.warn('Failed to persist template to Turso:', err);
     const saved = makeSaved(current?.id || id);
@@ -1004,6 +1141,7 @@ export async function deleteTemplate(client: Client, id: string, syncObjectKey?:
     removeMock();
     return result.rowsAffected > 0;
   } catch (err) {
+    throwIfTursoPersistenceMustFail(client);
     if (syncObjectKey) throw err;
     return mockTemplates.length < initialLength;
   }
@@ -1034,24 +1172,34 @@ export async function getTemplateHtmlForSync(client: Client, templateId: string)
     return mockTemplates.find((item) => item.id === templateId)?.html_content || null;
   }
 
-  const result = await client.execute({
-    sql: 'SELECT html_content FROM templates WHERE id = ? LIMIT 1',
-    args: [templateId],
-  });
-  return result.rows[0] ? String(result.rows[0].html_content || '') : null;
+  try {
+    const result = await client.execute({
+      sql: 'SELECT html_content FROM templates WHERE id = ? LIMIT 1',
+      args: [templateId],
+    });
+    return result.rows[0] ? String(result.rows[0].html_content || '') : null;
+  } catch (error) {
+    throwIfTursoPersistenceMustFail(client);
+    throw error;
+  }
 }
 
 export async function getTemplateSyncJob(client: Client, objectKey: string): Promise<TemplateSyncJob | null> {
   if (isMockClient(client)) return null;
-  await initTursoSchema(client);
-  if (isMockClient(client)) return null;
+  try {
+    await initTursoSchema(client);
+    if (isMockClient(client)) return null;
 
-  const result = await client.execute({
-    sql: `SELECT object_key, action, template_id, generation, attempt_count, status, next_attempt_at
-          FROM template_sync_jobs WHERE object_key = ? LIMIT 1`,
-    args: [objectKey],
-  });
-  return result.rows[0] ? mapTemplateSyncJob(result.rows[0]) : null;
+    const result = await client.execute({
+      sql: `SELECT object_key, action, template_id, generation, attempt_count, status, next_attempt_at
+            FROM template_sync_jobs WHERE object_key = ? LIMIT 1`,
+      args: [objectKey],
+    });
+    return result.rows[0] ? mapTemplateSyncJob(result.rows[0]) : null;
+  } catch (error) {
+    throwIfTursoPersistenceMustFail(client);
+    throw error;
+  }
 }
 
 export async function getTemplateSyncJobs(
@@ -1060,34 +1208,44 @@ export async function getTemplateSyncJobs(
   limit = 20
 ): Promise<TemplateSyncJob[]> {
   if (isMockClient(client)) return [];
-  await initTursoSchema(client);
-  if (isMockClient(client)) return [];
+  try {
+    await initTursoSchema(client);
+    if (isMockClient(client)) return [];
 
-  const now = nowIso();
-  if (force) {
-    await client.execute({
-      sql: `UPDATE template_sync_jobs SET status = 'pending', attempt_count = 0,
-            next_attempt_at = ?, last_error = NULL, updated_at = ? WHERE status = 'failed'`,
-      args: [now, now],
+    const now = nowIso();
+    if (force) {
+      await client.execute({
+        sql: `UPDATE template_sync_jobs SET status = 'pending', attempt_count = 0,
+              next_attempt_at = ?, last_error = NULL, updated_at = ? WHERE status = 'failed'`,
+        args: [now, now],
+      });
+    }
+
+    const result = await client.execute({
+      sql: `SELECT object_key, action, template_id, generation, attempt_count, status, next_attempt_at
+            FROM template_sync_jobs
+            WHERE status = 'pending' AND next_attempt_at <= ?
+            ORDER BY updated_at ASC LIMIT ?`,
+      args: [now, Math.min(Math.max(limit, 1), 20)],
     });
+    return result.rows.map(mapTemplateSyncJob);
+  } catch (error) {
+    throwIfTursoPersistenceMustFail(client);
+    throw error;
   }
-
-  const result = await client.execute({
-    sql: `SELECT object_key, action, template_id, generation, attempt_count, status, next_attempt_at
-          FROM template_sync_jobs
-          WHERE status = 'pending' AND next_attempt_at <= ?
-          ORDER BY updated_at ASC LIMIT ?`,
-    args: [now, Math.min(Math.max(limit, 1), 20)],
-  });
-  return result.rows.map(mapTemplateSyncJob);
 }
 
 export async function completeTemplateSyncJob(client: Client, job: TemplateSyncJob): Promise<void> {
   if (isMockClient(client)) return;
-  await client.execute({
-    sql: 'DELETE FROM template_sync_jobs WHERE object_key = ? AND generation = ?',
-    args: [job.object_key, job.generation],
-  });
+  try {
+    await client.execute({
+      sql: 'DELETE FROM template_sync_jobs WHERE object_key = ? AND generation = ?',
+      args: [job.object_key, job.generation],
+    });
+  } catch (error) {
+    throwIfTursoPersistenceMustFail(client);
+    throw error;
+  }
 }
 
 export async function failTemplateSyncJob(
@@ -1101,11 +1259,16 @@ export async function failTemplateSyncJob(
   const delaySeconds = Math.min(30 * (2 ** (attemptCount - 1)), 1800);
   const nextAttempt = exhausted ? null : new Date(Date.now() + delaySeconds * 1000).toISOString();
   const now = nowIso();
-  await client.execute({
-    sql: `UPDATE template_sync_jobs SET attempt_count = ?, status = ?, next_attempt_at = ?,
-          last_error = ?, updated_at = ? WHERE object_key = ? AND generation = ?`,
-        args: [attemptCount, exhausted ? 'failed' : 'pending', nextAttempt, failureCode.slice(0, 80), now, job.object_key, job.generation],
-  });
+  try {
+    await client.execute({
+      sql: `UPDATE template_sync_jobs SET attempt_count = ?, status = ?, next_attempt_at = ?,
+            last_error = ?, updated_at = ? WHERE object_key = ? AND generation = ?`,
+      args: [attemptCount, exhausted ? 'failed' : 'pending', nextAttempt, failureCode.slice(0, 80), now, job.object_key, job.generation],
+    });
+  } catch (error) {
+    throwIfTursoPersistenceMustFail(client);
+    throw error;
+  }
 }
 
 export async function incrementDownloads(client: Client, id: string): Promise<number> {
@@ -1127,6 +1290,7 @@ export async function incrementDownloads(client: Client, id: string): Promise<nu
     });
     return Number(res.rows[0]?.downloads || item?.downloads || 0);
   } catch {
+    throwIfTursoPersistenceMustFail(client);
     return item?.downloads || 1;
   }
 }
@@ -1150,6 +1314,7 @@ export async function incrementViews(client: Client, id: string): Promise<number
     });
     return Number(res.rows[0]?.views || item?.views || 0);
   } catch {
+    throwIfTursoPersistenceMustFail(client);
     return item?.views || 1;
   }
 }
@@ -1173,6 +1338,7 @@ export async function testTursoConnection(client: Client): Promise<{ success: bo
       count,
     };
   } catch (err: any) {
+    throwIfTursoPersistenceMustFail(client);
     return {
       success: true,
       message: `Turso offline (${err?.message || 'Connection failed'}). In-memory store active with ${mockTemplates.length} templates.`,
@@ -1240,6 +1406,7 @@ export async function getR2StorageReport(client: Client): Promise<{
 
     return { totalFiles, totalBytes, totalKilobytes, totalMegabytes, totalGigabytes, formattedSize };
   } catch {
+    throwIfTursoPersistenceMustFail(client);
     return getR2StorageReport(fallbackMockClient);
   }
 }
@@ -1287,6 +1454,7 @@ export async function getSiteSettings(client: Client): Promise<SiteSettings> {
       dev_mode: map.dev_mode === 'true',
     };
   } catch {
+    throwIfTursoPersistenceMustFail(client);
     return defaultSettings;
   }
 }
@@ -1320,6 +1488,7 @@ export async function saveSiteSettings(
       }
     }
   } catch (err) {
+    throwIfTursoPersistenceMustFail(client);
     console.warn('Failed to save settings to Turso:', err);
   }
 
@@ -1346,6 +1515,7 @@ export async function getAdminUsers(client: Client): Promise<AdminUser[]> {
       updated_at: String(row.updated_at),
     }));
   } catch {
+    throwIfTursoPersistenceMustFail(client);
     return mockAdmins.map((a) => ({
       id: a.id,
       username: a.username,
@@ -1398,6 +1568,7 @@ export async function updateAdminUser(
     }
     return Boolean(mockAdmin);
   } catch {
+    throwIfTursoPersistenceMustFail(client);
     return Boolean(mockAdmin);
   }
 }
@@ -1431,6 +1602,7 @@ export async function deleteAdminUser(
     });
     return { success: res.rowsAffected > 0 };
   } catch {
+    throwIfTursoPersistenceMustFail(client);
     return { success: mockAdmins.length < initialLength };
   }
 }

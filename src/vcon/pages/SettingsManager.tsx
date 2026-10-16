@@ -14,6 +14,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { AdminUser } from '../../types.ts';
+import { isValidAdminPassword } from '../../lib/authPolicy.ts';
 import { useAdminConfirmation } from '../components/AdminConfirmation.tsx';
 
 interface Props {
@@ -208,8 +209,8 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
       setAddError('Username must be at least 3 characters');
       return;
     }
-    if (newAdminPassword.length < 6) {
-      setAddError('Password must be at least 6 characters');
+    if (!isValidAdminPassword(newAdminPassword)) {
+      setAddError('Password must be 15 to 128 characters');
       return;
     }
 
@@ -263,8 +264,8 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
       return;
     }
 
-    if (editPassword && editPassword.length < 6) {
-      setEditError('Password must be at least 6 characters');
+    if (editPassword && !isValidAdminPassword(editPassword)) {
+      setEditError('Password must be 15 to 128 characters');
       return;
     }
 

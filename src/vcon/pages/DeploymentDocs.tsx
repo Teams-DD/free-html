@@ -32,7 +32,7 @@ R2_ACCOUNT_ID=your_cloudflare_account_id
 R2_ACCESS_KEY_ID=your_r2_access_key_id
 R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
 R2_BUCKET_NAME=html-templates
-ADMIN_SECRET=secure_random_admin_session_secret`;
+ADMIN_SECRET=replace_with_a_generated_secret_at_least_43_characters_long`;
 
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-[#090a0c] text-xs overflow-hidden">

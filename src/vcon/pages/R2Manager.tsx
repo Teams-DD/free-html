@@ -169,7 +169,7 @@ export const R2Manager: React.FC<Props> = ({
     }
 
     setActionLoading(true);
-    addLog('Verifying and saving Cloudflare R2 credentials to database...');
+    addLog('R2 credentials must be configured in deployment environment secrets.');
 
     try {
       const res = await onSaveR2Config({
@@ -195,6 +195,7 @@ export const R2Manager: React.FC<Props> = ({
         onRefresh();
         fetchBucketFiles();
       } else {
+        setSecretAccessKey('');
         const errText = res.error || res.message || 'Failed to save credentials';
         addLog(`Save failed: ${errText}`);
         setFeedback({ type: 'error', text: errText });

@@ -397,16 +397,11 @@ const VconAppContent: React.FC = () => {
     bucketName: string;
     publicDomain?: string;
   }): Promise<{ success: boolean; message?: string; error?: string }> => {
-    const res = await fetch('/api/vcon/r2-config', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(config),
-    });
-    const data: any = await res.json();
-    return data;
+    void config;
+    return {
+      success: false,
+      error: 'Configure R2 credentials as deployment environment secrets; the application does not store them.',
+    };
   };
 
   const handleDeleteR2Config = async (): Promise<boolean> => {
@@ -419,16 +414,8 @@ const VconAppContent: React.FC = () => {
   };
 
   const handleSaveRuntimeEnv = async (creds: Record<string, string | undefined>) => {
-    const res = await fetch('/api/vcon/save-env', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(creds),
-    });
-    const data: any = await res.json();
-    return Boolean(data.success);
+    void creds;
+    return false;
   };
 
   if (verifying) {

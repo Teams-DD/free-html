@@ -84,14 +84,15 @@ export const TursoManager: React.FC<Props> = ({
     e.preventDefault();
     if (!dbUrl) return;
     setActionLoading(true);
-    addLog('Updating Turso runtime configuration...');
+    addLog('Turso credentials must be configured as deployment environment secrets.');
     try {
       const ok = await onSaveCredentials({ url: dbUrl.trim(), token: authToken.trim() });
       if (ok) {
         addLog('Credentials saved.');
         setAuthToken('');
       } else {
-        addLog('Failed to save credentials.');
+        setAuthToken('');
+        addLog('Credentials were not sent or saved. Configure them in the deployment environment.');
       }
     } catch (err: any) {
       addLog(`Error: ${err?.message}`);

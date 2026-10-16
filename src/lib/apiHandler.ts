@@ -15,6 +15,11 @@ import {
   incrementDownloads,
   incrementViews,
   testTursoConnection,
+  enforceTursoPersistence,
+  TursoPersistenceError,
+  getPublicCategories,
+  recordActivityEvent,
+  getDailyActivityAggregates,
 } from './turso.ts';
 import {
   getR2Client,
@@ -29,10 +34,36 @@ import {
   listR2Objects,
   listNativeR2Objects,
 } from './r2.ts';
-import { createAdminToken, verifyAdminToken } from './auth.ts';
+import {
+  consumeAuthAttempt,
+  createAdminToken,
+  isValidAdminSecret,
+  verifyAdminToken,
+} from './auth.ts';
+import { isValidAdminPassword } from './authPolicy.ts';
 
 const STATUS_CACHE_TTL_MS = 30_000;
 let statusCache: { expiresAt: number; status: any } | null = null;
+const activityRequestWindows = new Map<string, { count: number; resetsAt: number }>();
+
+function allowActivityRequest(key: string): boolean {
+  const now = Date.now();
+  for (const [entryKey, entry] of activityRequestWindows) {
+    if (entry.resetsAt <= now) activityRequestWindows.delete(entryKey);
+  }
+  let entry = activityRequestWindows.get(key);
+  if (!entry) {
+    if (activityRequestWindows.size >= 1000) {
+      const oldestKey = activityRequestWindows.keys().next().value;
+      if (oldestKey) activityRequestWindows.delete(oldestKey);
+    }
+    entry = { count: 0, resetsAt: now + 60_000 };
+    activityRequestWindows.set(key, entry);
+  }
+  if (entry.count >= 60) return false;
+  entry.count += 1;
+  return true;
+}
 
 function json(data: any, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(data), {
@@ -78,6 +109,21 @@ function appendAssetRevision(
 }
 
 export async function handleApiRequest(req: Request, env?: Record<string, any>): Promise<Response> {
+  try {
+    return await handleApiRequestInternal(req, env);
+  } catch (error) {
+    if (error instanceof TursoPersistenceError) {
+      return json({ success: false, error: 'Persistent storage is unavailable.' }, 503);
+    }
+    console.error('Unhandled API request failure', {
+      method: req.method,
+      error_type: error instanceof Error ? error.name : 'RequestError',
+    });
+    return json({ success: false, error: 'Internal server error.' }, 500);
+  }
+}
+
+async function handleApiRequestInternal(req: Request, env?: Record<string, any>): Promise<Response> {
   const requestStartedAt = performance.now();
   const url = new URL(req.url);
   const pathname = url.pathname;
@@ -107,51 +153,18 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
   const tursoUrl = resolveEnv('TURSO_DATABASE_URL', env);
   const tursoToken = resolveEnv('TURSO_AUTH_TOKEN', env);
   const tursoClient = getTursoClient(tursoUrl, tursoToken);
+  const isDeployedRuntime = env !== undefined || resolveEnv('NODE_ENV', env) === 'production';
   const forceStatusRefresh = pathname === '/api/status' && method === 'GET' && url.searchParams.get('refresh') === '1';
   if (pathname === '/api/status' && method === 'GET' && !forceStatusRefresh && statusCache && statusCache.expiresAt > Date.now()) {
     return json({ success: true, status: statusCache.status });
   }
 
   const isR2FileRequest = /^\/api\/r2\/(?:file|object)(?:\/|$)/.test(pathname);
-  const isTemplateDetailRead = method === 'GET' && /^\/api\/templates\/[^/]+$/.test(pathname);
-  const isTemplateSyncWrite =
-    (pathname === '/api/vcon/templates' && method === 'POST') ||
-    (pathname === '/api/vcon/templates/bulk-upload' && method === 'POST') ||
-    (pathname === '/api/vcon/templates/sync-retry' && method === 'POST') ||
-    (/^\/api\/vcon\/templates\/[^/]+$/.test(pathname) && method === 'DELETE');
-  const needsStoredR2Config =
-    (pathname === '/api/status' && method === 'GET') ||
-    (pathname === '/api/settings' && method === 'GET') ||
-    (pathname === '/api/templates' && method === 'GET') ||
-    isTemplateDetailRead ||
-    (isR2FileRequest && ['GET', 'HEAD'].includes(method)) ||
-    ['/api/vcon/test-r2', '/api/vcon/r2-stats', '/api/vcon/r2-files'].includes(pathname) ||
-    isTemplateSyncWrite ||
-    (pathname === '/api/vcon/settings' && ['GET', 'POST'].includes(method)) ||
-    (pathname === '/api/vcon/upload-asset' && method === 'POST');
-
-  // Load database-stored R2 credentials from Turso settings table if present
-  let dbR2Config: any = null;
-  if (tursoClient && needsStoredR2Config) {
-    const configReadStartedAt = performance.now();
-    try {
-      const { getSetting } = await import('./turso.ts');
-      const savedJson = await getSetting(tursoClient, 'r2_config');
-      if (savedJson) {
-        dbR2Config = JSON.parse(savedJson);
-      }
-    } catch {
-      // Use environment-backed R2 config if the database lookup fails.
-    } finally {
-      r2ConfigReadDuration = performance.now() - configReadStartedAt;
-    }
-  }
-
-  const r2AccountId = dbR2Config?.accountId || resolveEnv('R2_ACCOUNT_ID', env);
-  const r2AccessKeyId = dbR2Config?.accessKeyId || resolveEnv('R2_ACCESS_KEY_ID', env);
-  const r2SecretAccessKey = dbR2Config?.secretAccessKey || resolveEnv('R2_SECRET_ACCESS_KEY', env);
-  const r2Bucket = dbR2Config?.bucketName || resolveEnv('R2_BUCKET_NAME', env) || 'html-templates';
-  const r2PublicDomain = dbR2Config?.publicDomain || resolveEnv('R2_PUBLIC_DOMAIN', env);
+  const r2AccountId = resolveEnv('R2_ACCOUNT_ID', env);
+  const r2AccessKeyId = resolveEnv('R2_ACCESS_KEY_ID', env);
+  const r2SecretAccessKey = resolveEnv('R2_SECRET_ACCESS_KEY', env);
+  const r2Bucket = resolveEnv('R2_BUCKET_NAME', env) || 'html-templates';
+  const r2PublicDomain = resolveEnv('R2_PUBLIC_DOMAIN', env);
 
   // Cloudflare native R2 bucket binding support (Pages Functions env binding)
   const nativeBucket = env?.BUCKET || env?.R2_BUCKET || env?.HTML_TEMPLATES_BUCKET;
@@ -161,6 +174,19 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
     accessKeyId: r2AccessKeyId,
     secretAccessKey: r2SecretAccessKey,
   });
+
+  const isTursoBackedRoute = pathname === '/api/settings' ||
+    pathname === '/api/categories' ||
+    pathname === '/api/templates' ||
+    pathname.startsWith('/api/templates/') ||
+    pathname === '/api/activity' ||
+    (pathname.startsWith('/api/vcon/') && pathname !== '/api/vcon/verify') ||
+    (isR2FileRequest && !nativeBucket && !r2Client);
+  const isMockTurso = (tursoClient as any)?.isMock === true || (tursoClient as any)?.protocol === 'mock';
+  if (isDeployedRuntime && isTursoBackedRoute && isMockTurso) {
+    return json({ success: false, error: 'Persistent Turso storage is not configured.' }, 503);
+  }
+  if (isDeployedRuntime && !isMockTurso) enforceTursoPersistence(tursoClient);
 
   const processTemplateSyncJob = async (job: Awaited<ReturnType<typeof getTemplateSyncJobs>>[number]) => {
     let success = false;
@@ -191,7 +217,8 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
       } else {
         failureCode = 'template_reference_missing';
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof TursoPersistenceError) throw error;
       success = false;
     }
 
@@ -221,11 +248,11 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
     const hasRealTurso = Boolean(tursoUrl && tursoToken) && !isMock;
     const status: any = {
       turso: {
-        configured: true,
+        configured: Boolean(tursoUrl && tursoToken) && !isMock,
         connected: false,
         isMock,
         message: isMock
-          ? 'In-memory SQLite store active (mocked for preview)'
+          ? 'Persistent Turso storage unavailable; in-memory data is not durable.'
           : 'Checking Turso...',
         templateCount: 0,
         url: hasRealTurso ? tursoUrl!.replace(/:\/\/.*@/, '://***@') : undefined,
@@ -254,7 +281,7 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
       },
     };
 
-    if (tursoClient) {
+    if (tursoClient && !isMock) {
       try {
         const testRes = await testTursoConnection(tursoClient);
         status.turso.connected = testRes.success;
@@ -263,9 +290,9 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
 
         const { getR2StorageReport } = await import('./turso.ts');
         status.r2.stats = await getR2StorageReport(tursoClient);
-      } catch (e: any) {
+      } catch {
         status.turso.connected = false;
-        status.turso.message = e.message || 'Error connecting to Turso SQLite';
+        status.turso.message = 'Persistent Turso storage is unavailable.';
       }
     }
 
@@ -309,7 +336,12 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
   }
 
   if (r2KeyRequested && (method === 'GET' || method === 'HEAD')) {
-    const cleanKey = decodeURIComponent(r2KeyRequested).replace(/^\/+/, '');
+    let cleanKey: string;
+    try {
+      cleanKey = decodeURIComponent(r2KeyRequested).replace(/^\/+/, '');
+    } catch {
+      return new Response('Invalid object key encoding.', { status: 400 });
+    }
 
     // 1. If native Cloudflare R2 bucket is available
     if (nativeBucket) {
@@ -353,6 +385,9 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
 
     // 3. Fallback: If it's a template key (templates/<slug>.html), serve from Turso DB
     if (cleanKey.startsWith('templates/') && cleanKey.endsWith('.html')) {
+      if (isDeployedRuntime && isMockTurso) {
+        return new Response('Persistent template storage is unavailable.', { status: 503 });
+      }
       const slug = cleanKey.replace(/^templates\//, '').replace(/\.html$/, '');
       const template = await getTemplateBySlug(tursoClient, slug);
       if (template?.html_content) {
@@ -393,7 +428,11 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
         200,
         publicReadTimingHeaders(performance.now() - settingsReadStartedAt)
       );
-    } catch {
+    } catch (error) {
+      if (error instanceof TursoPersistenceError) {
+        return json({ success: false, error: 'Persistent storage is unavailable.' }, 503,
+          publicReadTimingHeaders(performance.now() - settingsReadStartedAt));
+      }
       return json({
         success: true,
         settings: {
@@ -404,6 +443,61 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
           og_image: '',
         },
       }, 200, publicReadTimingHeaders(performance.now() - settingsReadStartedAt));
+    }
+  }
+
+  // GET /api/categories - active categories represented in the public catalog
+  if (pathname === '/api/categories' && method === 'GET') {
+    try {
+      const items = await getPublicCategories(tursoClient);
+      return json({ success: true, count: items.length, items });
+    } catch (error) {
+      return json({ success: false, error: 'Failed to fetch categories.' },
+        error instanceof TursoPersistenceError ? 503 : 500);
+    }
+  }
+
+  // POST /api/activity - best-effort, identity-free aggregate events
+  if (pathname === '/api/activity' && method === 'POST') {
+    const clientKey = req.headers.get('CF-Connecting-IP')?.trim() || 'unknown';
+    if (!allowActivityRequest(clientKey)) {
+      return json({ success: false, error: 'Activity request limit reached.' }, 429);
+    }
+
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return json({ success: false, error: 'Invalid activity event.' }, 400);
+    }
+
+    const event = body?.event;
+    const slug = body?.slug;
+    if (!['category_view', 'template_open'].includes(event) ||
+        typeof slug !== 'string' || !slug || slug.length > 200 || /[\/\\\u0000-\u001f]/.test(slug)) {
+      return json({ success: false, error: 'Invalid activity event.' }, 400);
+    }
+
+    try {
+      if (event === 'category_view') {
+        const categories = await getPublicCategories(tursoClient);
+        if (!categories.some((category) => category.slug === slug)) {
+          return json({ success: false, error: 'Unknown category.' }, 404);
+        }
+      } else {
+        const template = await getTemplateBySlug(tursoClient, slug);
+        if (!template || template.slug !== slug) {
+          return json({ success: false, error: 'Unknown template.' }, 404);
+        }
+      }
+      await recordActivityEvent(tursoClient, event, slug);
+      return json({ success: true }, 202);
+    } catch (error) {
+      console.warn('Activity aggregate write failed', {
+        event,
+        error_type: error instanceof Error ? error.name : 'ActivityError',
+      });
+      return json({ success: false, error: 'Activity was not recorded.' }, 202);
     }
   }
 
@@ -436,8 +530,8 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
       );
     } catch (err: any) {
       return json(
-        { success: false, error: err?.message || 'Failed to fetch templates' },
-        500,
+        { success: false, error: 'Failed to fetch templates.' },
+        err instanceof TursoPersistenceError ? 503 : 500,
         publicReadTimingHeaders(performance.now() - templatesReadStartedAt)
       );
     }
@@ -487,7 +581,17 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
     if (!tursoClient) return json({ success: false, error: 'Database not configured' }, 503);
     const slug = decodePathSlug(downloadMatch[1]);
     if (slug === null) return json({ success: false, error: 'Invalid template slug' }, 400);
+    const template = await getTemplateBySlug(tursoClient, slug);
+    if (!template) return json({ success: false, error: 'Template not found' }, 404);
     const count = await incrementDownloads(tursoClient, slug);
+    try {
+      await recordActivityEvent(tursoClient, 'download_request', template.slug);
+    } catch (error) {
+      console.warn('Activity aggregate write failed', {
+        event: 'download_request',
+        error_type: error instanceof Error ? error.name : 'ActivityError',
+      });
+    }
     return json({ success: true, downloads: count });
   }
 
@@ -544,16 +648,30 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
   // POST /api/vcon/register-admin - First time admin account creation
   if (pathname === '/api/vcon/register-admin' && method === 'POST') {
     try {
+      const adminSecret = resolveEnv('ADMIN_SECRET', env);
+      if (!isValidAdminSecret(adminSecret)) {
+        return json({ success: false, error: 'Admin authentication is not configured.' }, 503);
+      }
+      const clientKey = req.headers.get('CF-Connecting-IP')?.trim() || 'unknown';
+      const attempt = consumeAuthAttempt(`register:${clientKey}`);
+      if (!attempt.allowed) {
+        return json({ success: false, error: 'Too many setup attempts. Try again later.' }, 429, {
+          'Retry-After': String(attempt.retryAfterSeconds),
+        });
+      }
+
       const body: any = await req.json();
       let { username, password, tursoUrl: newTursoUrl, tursoToken: newTursoToken } = body;
 
       // Allow configuring Turso credentials on the fly if set
-      if (newTursoUrl && typeof process !== 'undefined' && process.env) {
+      if (!isDeployedRuntime && newTursoUrl && typeof process !== 'undefined' && process.env) {
         process.env.TURSO_DATABASE_URL = newTursoUrl;
         if (newTursoToken) process.env.TURSO_AUTH_TOKEN = newTursoToken;
       }
 
-      const activeTursoClient = getTursoClient(newTursoUrl || tursoUrl, newTursoToken || tursoToken);
+      const activeTursoClient = isDeployedRuntime
+        ? tursoClient
+        : getTursoClient(newTursoUrl || tursoUrl, newTursoToken || tursoToken);
 
       const { countAdmins, createAdminUser } = await import('./turso.ts');
       const { hashPassword } = await import('./auth.ts');
@@ -570,14 +688,14 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
         return json({ success: false, error: 'Username must be at least 3 characters long.' }, 400);
       }
 
-      if (!password || typeof password !== 'string' || password.length < 6) {
-        return json({ success: false, error: 'Password must be at least 6 characters long.' }, 400);
+      if (!isValidAdminPassword(password)) {
+        return json({ success: false, error: 'Password must be 15 to 128 characters long.' }, 400);
       }
 
       const { hash, salt } = await hashPassword(password);
       const newAdmin = await createAdminUser(activeTursoClient, username.trim(), hash, salt);
 
-      const token = await createAdminToken(newAdmin.username, newAdmin.id);
+      const token = await createAdminToken(newAdmin.username, newAdmin.id, adminSecret);
       return json({
         success: true,
         token,
@@ -593,6 +711,18 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
   // POST /api/vcon/login - Authenticates against admins store
   if (pathname === '/api/vcon/login' && method === 'POST') {
     try {
+      const adminSecret = resolveEnv('ADMIN_SECRET', env);
+      if (!isValidAdminSecret(adminSecret)) {
+        return json({ success: false, error: 'Admin authentication is not configured.' }, 503);
+      }
+      const clientKey = req.headers.get('CF-Connecting-IP')?.trim() || 'unknown';
+      const attempt = consumeAuthAttempt(`login:${clientKey}`);
+      if (!attempt.allowed) {
+        return json({ success: false, error: 'Too many login attempts. Try again later.' }, 429, {
+          'Retry-After': String(attempt.retryAfterSeconds),
+        });
+      }
+
       const body: any = await req.json();
       const { username, password } = body;
 
@@ -613,7 +743,7 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
         return json({ success: false, error: 'Invalid admin username or password' }, 401);
       }
 
-      const token = await createAdminToken(admin.username, admin.id);
+      const token = await createAdminToken(admin.username, admin.id, adminSecret);
       return json({ success: true, token, user: { username: admin.username } });
     } catch (err: any) {
       return json({ success: false, error: err?.message || 'Login error' }, 500);
@@ -624,7 +754,7 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
   if (pathname === '/api/vcon/verify' && method === 'POST') {
     const authHeader = req.headers.get('Authorization');
     const token = authHeader?.replace(/^Bearer\s+/i, '');
-    const valid = await verifyAdminToken(token);
+    const valid = await verifyAdminToken(token, resolveEnv('ADMIN_SECRET', env));
     return json({ success: valid });
   }
 
@@ -632,10 +762,32 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
   if (pathname.startsWith('/api/vcon/')) {
     const authHeader = req.headers.get('Authorization');
     const token = authHeader?.replace(/^Bearer\s+/i, '');
-    const isValid = await verifyAdminToken(token);
+    const isValid = await verifyAdminToken(token, resolveEnv('ADMIN_SECRET', env));
 
     if (!isValid) {
       return json({ success: false, error: 'Unauthorized: Admin authentication required' }, 401);
+    }
+
+    // GET /api/vcon/analytics - bounded daily aggregate report
+    if (pathname === '/api/vcon/analytics' && method === 'GET') {
+      const toDay = url.searchParams.get('to') || new Date().toISOString().slice(0, 10);
+      const defaultFrom = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const fromDay = url.searchParams.get('from') || defaultFrom;
+      const isValidDay = (value: string) => {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+        const date = new Date(`${value}T00:00:00.000Z`);
+        return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+      };
+      if (!isValidDay(fromDay) || !isValidDay(toDay)) {
+        return json({ success: false, error: 'Dates must use YYYY-MM-DD.' }, 400);
+      }
+      const fromTime = Date.parse(`${fromDay}T00:00:00.000Z`);
+      const toTime = Date.parse(`${toDay}T00:00:00.000Z`);
+      if (fromTime > toTime || toTime - fromTime > 89 * 24 * 60 * 60 * 1000) {
+        return json({ success: false, error: 'Date range must be between 1 and 90 days.' }, 400);
+      }
+      const items = await getDailyActivityAggregates(tursoClient, fromDay, toDay);
+      return json({ success: true, from: fromDay, to: toDay, items });
     }
 
     // POST /api/vcon/init-db - Initialize schema
@@ -701,61 +853,12 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
       }
     }
 
-    // POST /api/vcon/r2-config - Save R2 credentials into Turso database settings
+    // R2 credentials must be configured in deployment environment secrets.
     if (pathname === '/api/vcon/r2-config' && method === 'POST') {
-      if (!tursoClient) {
-        return json({ success: false, error: 'Turso SQLite database is not configured.' }, 503);
-      }
-
-      try {
-        const body: any = await req.json();
-        const { accountId, accessKeyId, secretAccessKey, bucketName, publicDomain } = body;
-
-        if (!accountId || !accessKeyId || !secretAccessKey || !bucketName) {
-          return json(
-            { success: false, error: 'Account ID, Access Key ID, Secret Access Key, and Bucket Name are required.' },
-            400
-          );
-        }
-
-        // Test credentials first before storing
-        const { getR2Client, testR2Connection } = await import('./r2.ts');
-        const testClient = getR2Client({
-          accountId: accountId.trim(),
-          accessKeyId: accessKeyId.trim(),
-          secretAccessKey: secretAccessKey.trim(),
-        });
-
-        if (!testClient) {
-          return json({ success: false, error: 'Failed to create R2 S3 client with provided credentials.' }, 400);
-        }
-
-        const testRes = await testR2Connection(testClient, bucketName.trim());
-        if (!testRes.success) {
-          return json({ success: false, error: `Connection test failed: ${testRes.message}` }, 400);
-        }
-
-        // Save into Turso settings table
-        const { setSetting } = await import('./turso.ts');
-        await setSetting(
-          tursoClient,
-          'r2_config',
-          JSON.stringify({
-            accountId: accountId.trim(),
-            accessKeyId: accessKeyId.trim(),
-            secretAccessKey: secretAccessKey.trim(),
-            bucketName: bucketName.trim(),
-            publicDomain: publicDomain ? publicDomain.trim() : '',
-          })
-        );
-
-        return json({
-          success: true,
-          message: `Cloudflare R2 bucket "${bucketName.trim()}" successfully verified and saved to database.`,
-        });
-      } catch (err: any) {
-        return json({ success: false, error: err?.message || 'Failed to save R2 configuration.' }, 500);
-      }
+      return json({
+        success: false,
+        error: 'R2 credentials must be configured as deployment environment secrets; application storage is disabled.',
+      }, 409);
     }
 
     // DELETE /api/vcon/r2-config - Remove R2 configuration from database
@@ -1054,8 +1157,8 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
         if (!username || username.trim().length < 3) {
           return json({ success: false, error: 'Username must be at least 3 characters' }, 400);
         }
-        if (!password || password.length < 6) {
-          return json({ success: false, error: 'Password must be at least 6 characters' }, 400);
+        if (!isValidAdminPassword(password)) {
+          return json({ success: false, error: 'Password must be 15 to 128 characters long.' }, 400);
         }
 
         const { createAdminUser, getAdminByUsername } = await import('./turso.ts');
@@ -1090,9 +1193,9 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
           updateData.username = username.trim();
         }
 
-        if (newPassword) {
-          if (newPassword.length < 6) {
-            return json({ success: false, error: 'New password must be at least 6 characters' }, 400);
+        if (newPassword !== undefined && newPassword !== null && newPassword !== '') {
+          if (!isValidAdminPassword(newPassword)) {
+            return json({ success: false, error: 'New password must be 15 to 128 characters long.' }, 400);
           }
           const { hashPassword } = await import('./auth.ts');
           const { hash, salt } = await hashPassword(newPassword);
@@ -1123,24 +1226,12 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
       return json({ success: true, message: 'Admin user deleted successfully.' });
     }
 
-    // POST /api/vcon/save-env (Allows setting runtime Turso & R2 credentials in admin panel)
+    // Runtime environment variables are immutable from the deployed application.
     if (pathname === '/api/vcon/save-env' && method === 'POST') {
-      try {
-        const body: any = await req.json();
-        if (typeof process !== 'undefined' && process.env) {
-          if (body.TURSO_DATABASE_URL) process.env.TURSO_DATABASE_URL = body.TURSO_DATABASE_URL;
-          if (body.TURSO_AUTH_TOKEN) process.env.TURSO_AUTH_TOKEN = body.TURSO_AUTH_TOKEN;
-          if (body.R2_ACCOUNT_ID) process.env.R2_ACCOUNT_ID = body.R2_ACCOUNT_ID;
-          if (body.R2_ACCESS_KEY_ID) process.env.R2_ACCESS_KEY_ID = body.R2_ACCESS_KEY_ID;
-          if (body.R2_SECRET_ACCESS_KEY) process.env.R2_SECRET_ACCESS_KEY = body.R2_SECRET_ACCESS_KEY;
-          if (body.R2_BUCKET_NAME) process.env.R2_BUCKET_NAME = body.R2_BUCKET_NAME;
-          if (body.R2_PUBLIC_DOMAIN) process.env.R2_PUBLIC_DOMAIN = body.R2_PUBLIC_DOMAIN;
-        }
-
-        return json({ success: true, message: 'Runtime configuration updated successfully.' });
-      } catch (err: any) {
-        return json({ success: false, error: err?.message || 'Failed to update credentials' }, 500);
-      }
+      return json({
+        success: false,
+        error: 'Runtime credentials cannot be changed by the application; configure deployment environment variables.',
+      }, 409);
     }
   }
 

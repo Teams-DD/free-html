@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { isValidAdminPassword } from '../../lib/authPolicy.ts';
 import {
   ShieldAlert,
   UserPlus,
@@ -41,8 +42,8 @@ export const VconSetupAdmin: React.FC<Props> = ({
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (!isValidAdminPassword(password)) {
+      setError('Password must be 15 to 128 characters');
       return;
     }
 

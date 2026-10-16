@@ -1,68 +1,77 @@
 # Production Readiness Audit
 
-## Audit Basis
+## Audit Record
 
-- Frozen source baseline: `fecafe2` on `main`, package `0.0.1`.
-- Baseline worktree was clean and synced on 2026-10-16.
-- Scope: public HTML modal slug routing, open/close state, view counting, and per-template browser metadata.
-- Source audit only; Pages deep-link behavior, production slugs, Turso migration, and crawler output are not verified live.
+- Audit date: 2026-10-16.
+- Current source baseline: `main` at `13faaf6ed9ec67dad5ca9a96e8e0e4701ff0a28c` (`Add card preview loading state`).
+- `package.json` and `package-lock.json` both declare `0.0.5`.
+- Source files had no worktree changes at the freeze. Four planning documents had prior uncommitted edits and are consolidated by this documentation refresh; the worktree is not claimed clean.
+- `fecafe2` / package `0.0.1` is the historical pre-routing baseline, not the current baseline.
+- This is a source/configuration audit, not a penetration test or live deployment verification. Findings distinguish proven source behavior from conditional production impact and unverified provider behavior.
 
-## Baseline Findings
+## Current Validation Evidence
 
-### F-01: Public route selection had no slug resolver
+- VS Code workspace diagnostics: no errors reported.
+- `npm ci --ignore-scripts` completed, but the lockfile-based Windows install did not install the TypeScript Windows optional package or Rolldown Windows native binding referenced by their optional dependency declarations.
+- Lockfile-only optional dependency generation and a lockfile-enabled `npm install --no-save` both made no tracked change and did not restore those packages.
+- `npm run lint`: blocked before TypeScript checking because `@typescript/typescript-win32-x64` is missing after lockfile install.
+- `npm run build`: blocked before bundling because Rolldown's Windows native binding and WASI fallback are missing after lockfile install.
+- `npx wrangler whoami`: reports Wrangler is unauthenticated. No staging target is configured.
+- `package.json` defines no automated test script.
+- `.env` and `.dev.vars` are absent. Cloudflare environment variables, production routes, Turso contents, and deployed behavior were not inspected or verified.
 
-`src/App.tsx` selected Admin for `/vcon` or `/vcon/*` and rendered PublicApp for every other path. PublicApp did not read the path/query to resolve a template.
+## Findings
 
-### F-02: Modal open/close was local state only
+### F-01 — Hard-coded Admin signing secret (P0 at frozen baseline; source remediation recorded)
 
-Card View set `activeModal`; X/Escape set it to `null`. There was no public History API synchronization.
+At the frozen baseline, [`src/lib/auth.ts`](../src/lib/auth.ts) returned a hard-coded signing key whenever `ADMIN_SECRET` was absent or empty. Both token creation and verification used that fallback. Protected `/api/vcon/*` routes relied on it. Phase 2 removes the fallback in the current worktree, requires a 43-character secret, passes the runtime value through sign/verify calls, adds a new token key id (invalidating old tokens), adds per-isolate setup/login attempt limits, and moves the shared password-length policy into [`src/lib/authPolicy.ts`](../src/lib/authPolicy.ts). Production secret presence/rotation and distributed rate limiting remain unverified.
 
-### F-03: Existing view counter was not called by modal preview
+### F-02 — Database failure could become successful in-memory operation (P0 at frozen baseline; source remediation recorded)
 
-`GET /api/templates/:slug` increments views asynchronously. Card/modal iframes use `/api/templates/:slug/raw`, which does not increment views. Calling detail GET on open would transfer the full HTML-bearing template again.
+At the frozen baseline, [`src/lib/turso.ts`](../src/lib/turso.ts) returned a process-local mock client when Turso configuration was missing or client/schema initialization failed. Schema initialization marked a failing real client as mock and returned a success-shaped result. Read helpers could return seed/mock data. Category mutations could return success after persistence failure. Phase 3 current source rejects mock clients for deployed DB-backed API routes, marks real clients strict, and makes helper catch blocks throw a sanitized persistence error. Runtime failure behavior has not been exercised.
 
-### F-04: Slug input is editable but not fully constrained for route paths
+### F-03 — R2 secret credentials were stored in the application database (P1 at frozen baseline; legacy value retained)
 
-Admin generates path-like slugs from new titles, but the slug input is manually editable. Do not infer production slug safety; no live database inventory was available.
+At the frozen baseline, the Admin R2 configuration API in [`src/lib/apiHandler.ts`](../src/lib/apiHandler.ts) serialized account ID, access key ID, secret access key, bucket name, and domain into Turso's `r2_config` value without source-level encryption. Phase 3 current source no longer reads or writes that value and rejects app-side credential/env writes; Admin forms no longer transmit entered secrets. Existing Turso values were not deleted or migrated, and provider-side access/encryption remains unknown. R2 requires deployment environment values/native binding; whether these are configured in production is unknown.
 
-### F-05: Baseline had no per-template description/image
+### F-04 — Malformed R2 object paths were decoded without a guard (P1 at frozen baseline; source remediation recorded)
 
-`HtmlTemplate` contained title/slug/category/tags/content/counters/dates but no template SEO description/image. Public metadata came from site settings and generic `index.html` metadata.
+At the frozen baseline, [`src/lib/apiHandler.ts`](../src/lib/apiHandler.ts) called `decodeURIComponent(r2KeyRequested)` without a local guard. Phase 4 current source catches malformed encoding and returns 400. Live Pages response behavior is not verified.
 
-### F-06: Deployment direct-path behavior was unknown
+### F-05 — Download counter records a request before content is ready (P1, metric semantics)
 
-Local Express has SPA fallback; Vite dev runs in SPA mode. `public/_routes.json` describes `/api/*` Functions. No `public/_redirects` or `404.html` was present. These facts do not prove deployed Pages slug-refresh behavior.
+At the frozen baseline, [`src/public/PublicApp.tsx`](../src/public/PublicApp.tsx) fired the download-counter POST before HTML retrieval, so a failed retrieval could still increase the counter. Phase 4 current source sends the counter request only after HTML retrieval and a browser download trigger; the UI says “Download started” and does not claim the browser saved a file. The API checks that the template exists before incrementing. Modal/card previews still use `/raw`; modal opens are not counted as views.
 
-## Phase 1 Source Record
+### F-06 — Category URL routing and persistent activity tracking were absent (P2 at frozen baseline; source remediation recorded)
 
-- Card View pushes `/{encodedSlug}?opened`; X/Escape replace the current entry with `/{encodedSlug}?closed`.
-- Direct opened routes resolve from the fetched metadata list. `popstate` synchronizes modal state.
-- `/vcon?opened` and `/vcon?closed` are routed to PublicApp so a slug `vcon` can be opened; bare `/vcon` remains Admin.
-- Unknown/malformed/multi-segment/URL-normalizing slugs show a return-to-catalog error. Encoded slug segments are decoded by raw/detail/download API handlers; stored slugs are not renamed.
-- URL state is client-side only. No persistent event or view-counter write was added.
+At the frozen baseline, public category selection/search/pagination were React state and category options came from template category names; public code did not resolve stored category slugs. Phase 6 current source adds `/categories/{slug}`, `/popular`, `/templates/{slug}`, validated catalog return context, and legacy route compatibility. It also adds daily aggregate category/template/download-request events without user identifiers or search terms. Browser, database migration, retention, and deployed route behavior have not been verified.
 
-## Phase 2 Source Record
+### F-07 — Public load failures can look like valid empty content (P2)
 
-- Added optional `description` to the shared template model, admin single-template editor, save payload, Turso row, and public metadata projection.
-- Fresh schema creates `description TEXT NOT NULL DEFAULT ''`. Existing schemas are checked with `PRAGMA table_info`; missing column is added with `ALTER TABLE`. A second column check handles concurrent migration attempts.
-- Existing and bulk-upload templates default to empty description. Legacy clients omitting the field preserve an existing description on edit. Public metadata uses the field when present.
-- While a modal is active, document title and Open Graph title use template title; meta description and Open Graph description use template description or site description fallback. Closing restores site-level title/description. Open Graph image remains site-level.
-- `package.json` and lockfile are synchronized at `0.0.3`.
-- No persistent open/close analytics, SSR/crawler path, R2 sync change, auth change, or unrelated API route was added.
-- Editor diagnostics report no errors in touched source/manifests. Turso migration and browser behavior are not runtime-tested; existing schema initializer falls back to mock mode if schema initialization fails.
+At the frozen baseline, failed template metadata loads shared the valid-empty UI and iframes lacked error handlers; no root React error boundary was mounted. Phase 4 current source has a retry state for failed catalog loads, explicit card/modal iframe failure feedback, and a root React reload recovery boundary. Browser behavior is not yet verified.
 
-## Remaining Risks / Unknowns
+### F-08 — Direct Pages deep-link behavior is unverified (release blocker until tested)
 
-- Actual production slugs may include reserved or URL-normalizing values; live inventory was unavailable.
-- Cloudflare Pages direct-route refresh and encoded-slash handling have not been tested.
-- Browser DOM metadata changes occur after JavaScript loads; server-rendered crawler metadata is out of scope.
-- URL state is not persistent analytics. The existing detail GET still increments views and returns HTML; Phase 1/2 do not call it from modal open.
-- No per-template social image exists; site-level Open Graph image remains in use.
+Local production Express in [`server.ts`](../server.ts) serves `index.html` for unmatched paths. [`public/_routes.json`](../public/_routes.json) routes `/api/*` to Pages Functions; it does not prove how Cloudflare Pages serves direct refreshes of `/{slug}` or future category paths. No Pages `_redirects` or `404.html` was present in the audited tree. The separate [`wrangler.cache.toml`](../wrangler.cache.toml) declares routes on `html.vibid.my`, a production hostname; it is not a staging target. No production or staging behavior is inferred from these files.
 
-## Phase 3 Staging Preflight (2026-10-16)
+### F-09 — Browser metadata is client-side; crawler behavior is unverified (P2)
 
-- Approval to stage and verify Phases 1–2 was received.
-- One build attempt failed before bundling because `@rolldown/binding-win32-x64-msvc` and the WASI fallback are missing.
-- One `npx wrangler whoami` attempt reported Wrangler is unauthenticated. No `.env` or `.dev.vars` exists in the workspace.
-- No non-production Pages/Worker route is configured. `wrangler.cache.toml` targets `html.vibid.my` production API paths; it was not deployed as staging.
-- No deployment, production write, cache purge, schema migration, or live regression was performed. Phase 3 is blocked before staging and is not complete.
+The HTML shell in [`index.html`](../index.html) contains generic site metadata. React updates document title and description after client data loads. The source does not provide server-rendered per-template metadata; crawler output was not tested.
+
+### F-10 — In-app deployment page claims verification not evidenced by this audit (P2)
+
+[`src/vcon/pages/DeploymentDocs.tsx`](../src/vcon/pages/DeploymentDocs.tsx) labels the Pages/Functions architecture “Verified.” This audit found configuration and source files, not a verified deployment. Do not treat that UI label as production evidence. Changing the visible label is outside this documentation-only task.
+
+## Source Behavior Present in the Baseline
+
+- Public catalog, search/category/Popular filters, 12/24/48 client-side pagination, lazy card iframes, template modal preview/code/device modes, copy, and download controls exist.
+- Slug modal routing, direct `?opened` resolution after metadata load, `popstate` handling, recoverable invalid-route UI, and per-template title/description metadata exist in source.
+- Phase 4 current source maps unexpected API exceptions to a generic 500 and safe log fields; Turso persistence failures remain sanitized 503 responses. Runtime provider behavior is unverified.
+- Phase 6 current source resolves active category slugs and records daily aggregate activity with authenticated bounded-range reads. No analytics UI was added; runtime behavior remains unverified.
+- `/vcon` and `/vcon/*` select Admin, except `/vcon?opened` or `?closed`, which are reserved for the legacy public slug route.
+- Admin auth, template/category/settings management, Turso/R2 management, and durable Turso-backed template sync-job code exist. Phase 2 auth hardening is now implemented in source; see [implementation-roadmap.md](implementation-roadmap.md#phase-2--admin-signing-and-access-hardening--implemented-in-source-runtime-pending) for its validation limits.
+- Source existence above does not prove browser, database, R2, cache, or production behavior.
+
+## Audit Limits
+
+During the frozen-baseline audit, no live credentials, database contents, production slug inventory, Cloudflare dashboard, deployed URLs, or customer data were accessed and no resources were changed. Later approved source phases are separately recorded; no production resource was changed by those source updates. See [implementation-roadmap.md](implementation-roadmap.md) and [error-handling.md](error-handling.md).

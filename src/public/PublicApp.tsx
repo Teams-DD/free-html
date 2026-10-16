@@ -14,7 +14,7 @@ import {
   X,
   Layers,
 } from 'lucide-react';
-import { PublicTemplateMetadata, SiteSettings } from '../types.ts';
+import { Category, PublicTemplateMetadata, SiteSettings } from '../types.ts';
 import { DevLogEntry, DevLogPanel } from './DevLogPanel.tsx';
 
 const rawTemplateUrl = (slug: string, hideScrollbars = false) =>
@@ -26,12 +26,49 @@ const templateModalUrl = (slug: string, state: 'opened' | 'closed'): string | nu
   return `${pathname}?${state}`;
 };
 const TEMPLATE_PAGE_SIZES = [12, 24, 48];
+type CatalogView = 'all' | 'popular' | 'category';
+interface CatalogRouteContext {
+  view: CatalogView;
+  categorySlug?: string;
+  page: number;
+  pageSize: number;
+}
+
+const catalogRouteUrl = ({ view, categorySlug, page, pageSize }: CatalogRouteContext): string => {
+  const pathname = view === 'popular'
+    ? '/popular'
+    : view === 'category' && categorySlug
+    ? `/categories/${encodeURIComponent(categorySlug)}`
+    : '/';
+  const params = new URLSearchParams();
+  if (page > 1) params.set('page', String(page));
+  if (pageSize !== TEMPLATE_PAGE_SIZES[0]) params.set('size', String(pageSize));
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
+};
+
+const templateRouteUrl = (slug: string, context: CatalogRouteContext): string | null => {
+  const pathname = `/templates/${encodeURIComponent(slug)}`;
+  const normalizedPathname = new URL(pathname, window.location.origin).pathname;
+  if (normalizedPathname !== pathname || normalizedPathname.split('/').filter(Boolean).length !== 2) return null;
+  const params = new URLSearchParams();
+  if (context.view === 'popular') params.set('view', 'popular');
+  if (context.view === 'category' && context.categorySlug) params.set('category', context.categorySlug);
+  if (context.page > 1) params.set('page', String(context.page));
+  if (context.pageSize !== TEMPLATE_PAGE_SIZES[0]) params.set('size', String(context.pageSize));
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
+};
 
 export const PublicApp: React.FC = () => {
   const [snippets, setSnippets] = useState<PublicTemplateMetadata[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
   const [loading, setLoading] = useState(true);
+  const [templateLoadError, setTemplateLoadError] = useState(false);
+  const [publicCategories, setPublicCategories] = useState<Category[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [categoriesLoadError, setCategoriesLoadError] = useState(false);
   const [settings, setSettings] = useState<SiteSettings>({
     site_name: 'HTML Snippets & Templates',
     site_description: 'Free responsive HTML snippets and component templates directory.',
@@ -85,6 +122,8 @@ export const PublicApp: React.FC = () => {
   // Modal preview state
   const [activeModal, setActiveModal] = useState<PublicTemplateMetadata | null>(null);
   const [modalRouteError, setModalRouteError] = useState(false);
+  const [modalPreviewError, setModalPreviewError] = useState(false);
+  const [categoryRouteError, setCategoryRouteError] = useState(false);
   const [viewMode, setViewMode] = useState<'preview' | 'code'>('preview');
   const [modalHtml, setModalHtml] = useState<string | null>(null);
   const [modalHtmlError, setModalHtmlError] = useState(false);
@@ -96,69 +135,164 @@ export const PublicApp: React.FC = () => {
   const snippetsRef = useRef(snippets);
   const loadingRef = useRef(loading);
   const activeModalRef = useRef(activeModal);
+  const categoriesRef = useRef(publicCategories);
+  const modalContextRef = useRef<{ context: CatalogRouteContext; legacy: boolean } | null>(null);
+  const lastResolvedLocationRef = useRef<string | null>(null);
   snippetsRef.current = snippets;
   loadingRef.current = loading;
   activeModalRef.current = activeModal;
+  categoriesRef.current = publicCategories;
 
-  const syncModalFromLocation = useCallback(() => {
+  const trackActivity = useCallback((event: 'category_view' | 'template_open', slug: string) => {
+    const endpoint = '/api/activity';
+    const startedAt = performance.now();
+    fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event, slug }),
+    })
+      .then((response) => recordApiResponse('POST', endpoint, response, startedAt))
+      .catch((error) => recordApiFailure('POST', endpoint, error));
+  }, [recordApiFailure, recordApiResponse]);
+
+  const catalogContext = (category: string, page: number, size: number): CatalogRouteContext => {
+    if (category === '__popular__') return { view: 'popular', page, pageSize: size };
+    if (category === 'all') return { view: 'all', page, pageSize: size };
+    const match = publicCategories.find((item) => item.name === category && item.status === 'active');
+    return match
+      ? { view: 'category', categorySlug: match.slug, page, pageSize: size }
+      : { view: 'all', page: 1, pageSize: size };
+  };
+
+  const syncRouteFromLocation = useCallback(() => {
+    if (loadingRef.current || categoriesLoading) return;
     const url = new URL(window.location.href);
-    const isOpened = url.searchParams.has('opened');
-    const isClosed = url.searchParams.has('closed');
+    const locationKey = `${url.pathname}${url.search}`;
+    const shouldTrack = lastResolvedLocationRef.current !== locationKey;
+    lastResolvedLocationRef.current = locationKey;
 
-    if (isOpened && isClosed) {
-      setActiveModal(null);
-      setModalRouteError(true);
-      return;
-    }
+    const pageValue = Number(url.searchParams.get('page'));
+    const page = Number.isSafeInteger(pageValue) && pageValue > 0 && pageValue <= 10_000 ? pageValue : 1;
+    const requestedSize = Number(url.searchParams.get('size'));
+    const size = TEMPLATE_PAGE_SIZES.includes(requestedSize) ? requestedSize : TEMPLATE_PAGE_SIZES[0];
+    const segments = url.pathname.split('/').filter(Boolean);
+    const opened = url.searchParams.has('opened');
+    const closed = url.searchParams.has('closed');
+    let context: CatalogRouteContext = { view: 'all', page, pageSize: size };
+    let templateSlug: string | null = null;
+    let legacyTemplateRoute = false;
+    let invalidTemplateRoute = false;
+    let invalidCategoryRoute = false;
 
-    if (!isOpened) {
-      setActiveModal(null);
-      setModalRouteError(false);
-      return;
-    }
-
-    const pathSegments = url.pathname.split('/').filter(Boolean);
-    if (pathSegments.length !== 1) {
-      setActiveModal(null);
-      setModalRouteError(true);
-      return;
-    }
-
-    let slug: string;
-    try {
-      slug = decodeURIComponent(pathSegments[0]);
-    } catch {
-      setActiveModal(null);
-      setModalRouteError(true);
-      return;
-    }
-
-    const template = snippetsRef.current.find((item) => item.slug === slug);
-    if (template) {
-      setModalRouteError(false);
-      if (activeModalRef.current?.slug !== template.slug) {
-        setActiveModal(template);
-        setViewMode('preview');
-        setModalHtml(null);
-        setModalHtmlError(false);
-        setDeviceSize('desktop');
+    if (opened && closed) {
+      invalidTemplateRoute = true;
+    } else if (url.pathname === '/popular') {
+      context = { view: 'popular', page, pageSize: size };
+    } else if (segments[0] === 'categories') {
+      if (segments.length !== 2) {
+        invalidCategoryRoute = true;
+      } else {
+        try {
+          const slug = decodeURIComponent(segments[1]);
+          const category = publicCategories.find((item) => item.slug === slug && item.status === 'active');
+          if (category) context = { view: 'category', categorySlug: category.slug, page, pageSize: size };
+          else invalidCategoryRoute = true;
+        } catch {
+          invalidCategoryRoute = true;
+        }
       }
-    } else if (!loadingRef.current) {
+    } else if (segments[0] === 'templates') {
+      if (segments.length !== 2) {
+        invalidTemplateRoute = true;
+      } else {
+        try {
+          templateSlug = decodeURIComponent(segments[1]);
+          if (url.searchParams.get('view') === 'popular' && url.searchParams.has('category')) {
+            invalidCategoryRoute = true;
+          } else if (url.searchParams.get('view') === 'popular') {
+            context = { view: 'popular', page, pageSize: size };
+          } else if (url.searchParams.has('category')) {
+            const slug = url.searchParams.get('category') || '';
+            const category = publicCategories.find((item) => item.slug === slug && item.status === 'active');
+            if (category) context = { view: 'category', categorySlug: category.slug, page, pageSize: size };
+            else invalidCategoryRoute = true;
+          }
+        } catch {
+          invalidTemplateRoute = true;
+        }
+      }
+    } else if (opened) {
+      if (segments.length !== 1) invalidTemplateRoute = true;
+      else {
+        try {
+          templateSlug = decodeURIComponent(segments[0]);
+          legacyTemplateRoute = true;
+        } catch {
+          invalidTemplateRoute = true;
+        }
+      }
+    } else if (segments.length > 1) {
+      invalidTemplateRoute = true;
+    }
+
+    if (invalidTemplateRoute || invalidCategoryRoute) {
+      setActiveModal(null);
+      setModalRouteError(invalidTemplateRoute);
+      setCategoryRouteError(invalidCategoryRoute);
+      return;
+    }
+
+    setCategoryRouteError(false);
+    setModalRouteError(false);
+    setSelectedCategory(context.view === 'popular'
+      ? '__popular__'
+      : context.view === 'category'
+      ? publicCategories.find((item) => item.slug === context.categorySlug)?.name || 'all'
+      : 'all');
+    setCurrentPage(page);
+    setPageSize(size);
+
+    if (!templateSlug) {
+      modalContextRef.current = null;
+      setActiveModal(null);
+      return;
+    }
+
+    const template = snippetsRef.current.find((item) => item.slug === templateSlug);
+    if (!template) {
       setActiveModal(null);
       setModalRouteError(true);
+      return;
     }
-  }, []);
+
+    modalContextRef.current = { context, legacy: legacyTemplateRoute };
+    if (shouldTrack) trackActivity('template_open', template.slug);
+    if (activeModalRef.current?.slug !== template.slug) {
+      setActiveModal(template);
+      setModalPreviewError(false);
+      setViewMode('preview');
+      setModalHtml(null);
+      setModalHtmlError(false);
+      setDeviceSize('desktop');
+    }
+  }, [categoriesLoading, publicCategories, trackActivity]);
 
   const openTemplateModal = (item: PublicTemplateMetadata) => {
-    const modalUrl = templateModalUrl(item.slug, 'opened');
+    const context = catalogContext(selectedCategory, currentPage, pageSize);
+    const modalUrl = templateRouteUrl(item.slug, context);
     if (!modalUrl) {
       setActiveModal(null);
       setModalRouteError(true);
       return;
     }
     window.history.pushState({ templateSlug: item.slug, modalState: 'opened' }, '', modalUrl);
+    lastResolvedLocationRef.current = `${window.location.pathname}${window.location.search}`;
+    modalContextRef.current = { context, legacy: false };
     setActiveModal(item);
+    trackActivity('template_open', item.slug);
+    setModalPreviewError(false);
     setModalRouteError(false);
+    setCategoryRouteError(false);
     setViewMode('preview');
     setModalHtml(null);
     setModalHtmlError(false);
@@ -167,29 +301,42 @@ export const PublicApp: React.FC = () => {
 
   const closeTemplateModal = useCallback(() => {
     if (activeModal) {
-      const modalUrl = templateModalUrl(activeModal.slug, 'closed');
-      if (modalUrl) {
-        window.history.replaceState(
-          { templateSlug: activeModal.slug, modalState: 'closed' },
-          '',
-          modalUrl
-        );
+      const modalContext = modalContextRef.current;
+      if (modalContext?.legacy) {
+        const legacyUrl = templateModalUrl(activeModal.slug, 'closed');
+        if (legacyUrl) window.history.replaceState({ templateSlug: activeModal.slug, modalState: 'closed' }, '', legacyUrl);
+      } else if (modalContext) {
+        const destination = catalogRouteUrl(modalContext.context);
+        window.history.replaceState({ catalogRoute: true }, '', destination);
+        lastResolvedLocationRef.current = `${window.location.pathname}${window.location.search}`;
+        setSelectedCategory(modalContext.context.view === 'popular'
+          ? '__popular__'
+          : modalContext.context.view === 'category'
+          ? publicCategories.find((item) => item.slug === modalContext.context.categorySlug)?.name || 'all'
+          : 'all');
+        setCurrentPage(modalContext.context.page);
+        setPageSize(modalContext.context.pageSize);
+        if (modalContext.context.view === 'category' && modalContext.context.categorySlug) {
+          trackActivity('category_view', modalContext.context.categorySlug);
+        }
       }
     }
+    modalContextRef.current = null;
     setActiveModal(null);
     setModalRouteError(false);
-  }, [activeModal]);
+    setCategoryRouteError(false);
+  }, [activeModal, publicCategories, trackActivity]);
 
   useEffect(() => {
-    const handlePopState = () => syncModalFromLocation();
+    const handlePopState = () => syncRouteFromLocation();
     window.addEventListener('popstate', handlePopState);
-    syncModalFromLocation();
+    syncRouteFromLocation();
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [syncModalFromLocation]);
+  }, [syncRouteFromLocation]);
 
   useEffect(() => {
-    if (!loading) syncModalFromLocation();
-  }, [loading, snippets, syncModalFromLocation]);
+    syncRouteFromLocation();
+  }, [loading, categoriesLoading, snippets, publicCategories, syncRouteFromLocation]);
 
   const getTemplateHtml = useCallback(async (slug: string): Promise<string> => {
     const cachedHtml = templateHtmlCache.current.get(slug);
@@ -309,20 +456,46 @@ export const PublicApp: React.FC = () => {
   const loadTemplates = useCallback(async () => {
     const startedAt = performance.now();
     setLoading(true);
+    setTemplateLoadError(false);
     try {
       const res = await fetch('/api/templates?metadata=1');
       const data: any = await res.json();
       recordApiResponse('GET', '/api/templates?metadata=1', res, startedAt);
-      if (res.ok && data.success) {
-        setSnippets(data.items || []);
+      if (res.ok && data.success && Array.isArray(data.items)) {
+        setSnippets(data.items);
       } else {
         setSnippets([]);
+        setTemplateLoadError(true);
       }
     } catch (error) {
       recordApiFailure('GET', '/api/templates?metadata=1', error);
       setSnippets([]);
+      setTemplateLoadError(true);
     } finally {
       setLoading(false);
+    }
+  }, [recordApiFailure, recordApiResponse]);
+
+  const loadCategories = useCallback(async () => {
+    const startedAt = performance.now();
+    setCategoriesLoading(true);
+    setCategoriesLoadError(false);
+    try {
+      const response = await fetch('/api/categories');
+      const data: any = await response.json();
+      recordApiResponse('GET', '/api/categories', response, startedAt);
+      if (response.ok && data.success && Array.isArray(data.items)) {
+        setPublicCategories(data.items);
+      } else {
+        setPublicCategories([]);
+        setCategoriesLoadError(true);
+      }
+    } catch (error) {
+      recordApiFailure('GET', '/api/categories', error);
+      setPublicCategories([]);
+      setCategoriesLoadError(true);
+    } finally {
+      setCategoriesLoading(false);
     }
   }, [recordApiFailure, recordApiResponse]);
 
@@ -346,7 +519,8 @@ export const PublicApp: React.FC = () => {
 
   useEffect(() => {
     loadTemplates();
-  }, [loadTemplates]);
+    loadCategories();
+  }, [loadCategories, loadTemplates]);
 
   useEffect(() => {
     const title = activeModal?.title || settings.site_name || 'HTML Snippets & Templates';
@@ -396,11 +570,50 @@ export const PublicApp: React.FC = () => {
     };
   }, [addDevLog, settings.dev_mode]);
 
-  // Categories list derived from real templates
   const categories = useMemo(() => {
-    const list = new Set(snippets.map((s) => s.category).filter(Boolean));
-    return ['all', '__popular__', ...Array.from(list)];
-  }, [snippets]);
+    return ['all', '__popular__', ...publicCategories.map((category) => category.name)];
+  }, [publicCategories]);
+
+  const writeCatalogRoute = (category: string, page: number, size: number, replace = true) => {
+    const context = catalogContext(category, page, size);
+    const destination = catalogRouteUrl(context);
+    if (replace) window.history.replaceState({ catalogRoute: true }, '', destination);
+    else window.history.pushState({ catalogRoute: true }, '', destination);
+  };
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+      writeCatalogRoute(selectedCategory, totalPages, pageSize);
+    }
+  }, [currentPage, pageSize, selectedCategory, totalPages]);
+
+  const selectCategory = (category: string) => {
+    const context = catalogContext(category, 1, pageSize);
+    const destination = catalogRouteUrl(context);
+    window.history.pushState({ catalogRoute: true }, '', destination);
+    lastResolvedLocationRef.current = `${window.location.pathname}${window.location.search}`;
+    setSelectedCategory(category);
+    setCurrentPage(1);
+    setModalRouteError(false);
+    setCategoryRouteError(false);
+    if (context.view === 'category' && context.categorySlug) {
+      trackActivity('category_view', context.categorySlug);
+    }
+  };
+
+  const changePage = (page: number) => {
+    const nextPage = Math.min(Math.max(page, 1), totalPages);
+    setCurrentPage(nextPage);
+    writeCatalogRoute(selectedCategory, nextPage, pageSize);
+  };
+
+  const changePageSize = (size: number) => {
+    const nextSize = TEMPLATE_PAGE_SIZES.includes(size) ? size : TEMPLATE_PAGE_SIZES[0];
+    setPageSize(nextSize);
+    setCurrentPage(1);
+    writeCatalogRoute(selectedCategory, 1, nextSize);
+  };
 
   // Filtered snippets
   const filteredSnippets = useMemo(() => {
@@ -430,11 +643,6 @@ export const PublicApp: React.FC = () => {
   const handleDownload = async (item: PublicTemplateMetadata) => {
     try {
       const endpoint = `/api/templates/${encodeURIComponent(item.slug)}/download`;
-      const startedAt = performance.now();
-      fetch(endpoint, { method: 'POST' })
-        .then((response) => recordApiResponse('POST', endpoint, response, startedAt))
-        .catch((error) => recordApiFailure('POST', endpoint, error));
-
       const html = await getTemplateHtml(item.slug);
       const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
       const url = URL.createObjectURL(blob);
@@ -446,11 +654,19 @@ export const PublicApp: React.FC = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      showToast('Downloaded successfully');
-
-      setSnippets((prev) =>
-        prev.map((s) => (s.id === item.id ? { ...s, downloads: s.downloads + 1 } : s))
-      );
+      showToast('Download started');
+      const counterStartedAt = performance.now();
+      fetch(endpoint, { method: 'POST' })
+        .then(async (response) => {
+          recordApiResponse('POST', endpoint, response, counterStartedAt);
+          const data: any = await response.json();
+          if (response.ok && data.success && Number.isFinite(Number(data.downloads))) {
+            setSnippets((current) => current.map((snippet) =>
+              snippet.id === item.id ? { ...snippet, downloads: Number(data.downloads) } : snippet
+            ));
+          }
+        })
+        .catch((error) => recordApiFailure('POST', endpoint, error));
     } catch {
       showToast('Failed to load template');
     }
@@ -497,10 +713,7 @@ export const PublicApp: React.FC = () => {
             {categories.map((cat) => (
               <button
                 key={cat}
-                onClick={() => {
-                  setSelectedCategory(cat);
-                  setCurrentPage(1);
-                }}
+                onClick={() => selectCategory(cat)}
                 className={`px-2.5 py-1 rounded text-[11px] font-medium transition cursor-pointer shadow-none border-0 ${
                   selectedCategory === cat
                     ? 'bg-zinc-800 text-zinc-100'
@@ -524,6 +737,7 @@ export const PublicApp: React.FC = () => {
               onChange={(e) => {
                 setSearch(e.target.value);
                 setCurrentPage(1);
+                writeCatalogRoute(selectedCategory, 1, pageSize);
               }}
               className="pl-8 pr-3 py-1 bg-[#131418] border border-zinc-800 rounded text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700 w-32 sm:w-48 transition shadow-none"
             />
@@ -542,19 +756,34 @@ export const PublicApp: React.FC = () => {
           <div className="h-64 flex flex-col items-center justify-center text-xs text-zinc-500 font-mono">
             Loading snippets...
           </div>
-        ) : modalRouteError ? (
+        ) : modalRouteError || categoryRouteError ? (
           <div className="h-64 flex flex-col items-center justify-center gap-3 text-center p-6 bg-[#121317] border border-zinc-800 rounded-md shadow-none">
-            <p className="text-xs text-zinc-400 font-medium">This template link is invalid or unavailable.</p>
+            <p className="text-xs text-zinc-400 font-medium">
+              {categoryRouteError ? 'This category link is invalid or unavailable.' : 'This template link is invalid or unavailable.'}
+            </p>
             <button
               type="button"
               onClick={() => {
                 window.history.pushState({}, '', '/');
                 setModalRouteError(false);
+                setCategoryRouteError(false);
+                setSelectedCategory('all');
                 setCurrentPage(1);
               }}
               className="px-2.5 py-1 bg-zinc-800 text-zinc-200 rounded text-[11px] font-medium"
             >
               Back to all templates
+            </button>
+          </div>
+        ) : templateLoadError ? (
+          <div className="h-64 flex flex-col items-center justify-center gap-3 text-center p-6 bg-[#121317] border border-zinc-800 rounded-md shadow-none">
+            <p className="text-xs text-zinc-400 font-medium">Unable to load templates.</p>
+            <button
+              type="button"
+              onClick={() => void loadTemplates()}
+              className="px-2.5 py-1 bg-zinc-800 text-zinc-200 rounded text-[11px] font-medium"
+            >
+              Retry
             </button>
           </div>
         ) : filteredSnippets.length === 0 ? (
@@ -585,6 +814,14 @@ export const PublicApp: React.FC = () => {
                       event.currentTarget.parentElement
                         ?.querySelector('[data-preview-loader]')
                         ?.setAttribute('hidden', '');
+                    }}
+                    onError={(event) => {
+                      const loader = event.currentTarget.parentElement?.querySelector<HTMLElement>('[data-preview-loader]');
+                      if (!loader) return;
+                      loader.removeAttribute('hidden');
+                      loader.querySelector('svg')?.remove();
+                      const message = loader.querySelector('span');
+                      if (message) message.textContent = 'Preview unavailable';
                     }}
                     sandbox="allow-scripts"
                     className="absolute left-0 top-0 w-[400%] h-[400%] max-w-none border-0 pointer-events-none scale-[0.25] origin-top-left"
@@ -670,10 +907,7 @@ export const PublicApp: React.FC = () => {
               <select
                 id="template-page-size"
                 value={pageSize}
-                onChange={(event) => {
-                  setPageSize(Number(event.target.value));
-                  setCurrentPage(1);
-                }}
+                onChange={(event) => changePageSize(Number(event.target.value))}
                 className="h-7 rounded border border-zinc-800 bg-[#131418] px-2 text-[11px] text-zinc-300"
               >
                 {TEMPLATE_PAGE_SIZES.map((size) => (
@@ -682,7 +916,7 @@ export const PublicApp: React.FC = () => {
               </select>
               <button
                 type="button"
-                onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
+                onClick={() => changePage(currentPage - 1)}
                 disabled={currentPage === 1}
                 aria-label="Previous page"
                 title="Previous page"
@@ -693,7 +927,7 @@ export const PublicApp: React.FC = () => {
               <span className="min-w-16 text-center">Page {currentPage} of {totalPages}</span>
               <button
                 type="button"
-                onClick={() => setCurrentPage((page) => Math.min(page + 1, totalPages))}
+                onClick={() => changePage(currentPage + 1)}
                 disabled={currentPage === totalPages}
                 aria-label="Next page"
                 title="Next page"
@@ -846,8 +1080,15 @@ export const PublicApp: React.FC = () => {
                     title="Modal Preview"
                     src={rawTemplateUrl(activeModal.slug, true)}
                     sandbox="allow-scripts allow-modals"
+                    onLoad={() => setModalPreviewError(false)}
+                    onError={() => setModalPreviewError(true)}
                     className="w-full h-full border-0 shadow-none"
                   />
+                  {modalPreviewError && (
+                    <div role="status" aria-live="polite" className="absolute inset-0 flex items-center justify-center bg-[#0b0c0e] text-xs text-zinc-400">
+                      Preview unavailable
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="w-full h-full bg-[#0b0c0e] p-3.5 overflow-auto shadow-none">
