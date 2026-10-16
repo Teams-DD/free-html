@@ -47,6 +47,8 @@
 ## Phase 6 Activity and URL Handling
 
 - Public category list is read from active category records; routes resolve by slug. Search text stays in local UI state and is never sent to the activity endpoint.
+- Single/bulk template forms select an active category when category data is available; API save paths reject inactive/unknown category names.
+- On schema initialization, if no `General` category exists, orphan template rows with category `General` are reassigned to the earliest active category. This idempotent data repair has not been run against a live DB; only matching template category values are affected, not category records.
 - `POST /api/activity` accepts only validated `category_view` and `template_open` events. `download_request` is recorded alongside the existing download-counter request.
 - Daily aggregate rows contain only UTC day, event, resource slug, count, and update time. IP is used transiently for in-memory request limiting and is not stored; user IDs, user agents, raw search terms, and per-user histories are not stored.
 - Aggregate reads require Admin auth and a valid date range of at most 90 days. Cleanup runs on aggregate writes and reads. Schema migration, retention, route history, and deployed event counts have not been runtime-tested.

@@ -288,6 +288,27 @@ export async function initTursoSchema(client: Client): Promise<{ success: boolea
       }
     }
 
+    const generalCategory = await client.execute({
+      sql: 'SELECT COUNT(*) as count FROM categories WHERE LOWER(name) = LOWER(?)',
+      args: ['General'],
+    });
+    if (Number(generalCategory.rows[0]?.count || 0) === 0) {
+      const firstActiveCategory = await client.execute(`
+        SELECT name FROM categories
+        WHERE status = 'active'
+        ORDER BY created_at ASC, id ASC
+        LIMIT 1
+      `);
+      const firstCategoryName = firstActiveCategory.rows[0]?.name;
+      if (firstCategoryName) {
+        await client.execute({
+          sql: `UPDATE templates SET category = ?, updated_at = ?
+                WHERE LOWER(TRIM(category)) = LOWER(?)`,
+          args: [String(firstCategoryName), nowIso(), 'General'],
+        });
+      }
+    }
+
     schemaInitializedClients.add(client as object);
     return { success: true, message: 'Database tables "templates", "admins", "settings", and "categories" verified in Turso SQLite.' };
   } catch {

@@ -72,6 +72,8 @@
 
 - Public routes support `/`, `/popular`, `/categories/{slug}`, and `/templates/{slug}`. Template routes preserve validated category/page/size or Popular context; modal close restores the catalog route. Search is not serialized. Legacy `/{slug}?opened`/`?closed` and `/vcon` Admin behavior remain.
 - Added read-only `GET /api/categories` for active category records. Existing visible controls and filter logic remain; active empty categories resolve to the existing empty-results state.
+- Template single/bulk forms now choose an active category after category data loads; editing a template whose stored category is missing/inactive defaults it to the first active category. Save APIs reject inactive/unknown category values.
+- Schema initialization conditionally reassigns only template rows with orphan `General` category values to the earliest active category, and only when no `General` category exists. This migration code has not run against the user's DB; no DB was accessed or modified during this task.
 - Added public `POST /api/activity` for `category_view` and `template_open`, with active resource validation and bounded per-minute in-memory request limits. Existing download-counter action adds `download_request` to aggregate storage best-effort.
 - Added additive `activity_daily` table with UTC day/event/slug/count only, 90-day cleanup on write/report read, and authenticated `GET /api/vcon/analytics` with strict date validation and a maximum 90-day range.
 - No user IDs, IPs, user agents, raw search terms, or per-user histories are stored. IP is used transiently for in-memory rate limiting only.

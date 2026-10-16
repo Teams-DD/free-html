@@ -948,6 +948,10 @@ async function handleApiRequestInternal(req: Request, env?: Record<string, any>)
         if (!Array.isArray(files) || files.length === 0) {
           return json({ success: false, error: 'No files provided for upload.' }, 400);
         }
+        const activeCategories = await getPublicCategories(tursoClient);
+        if (activeCategories.length === 0) {
+          return json({ success: false, error: 'Create an active category before uploading templates.' }, 409);
+        }
 
         const results: any[] = [];
         let successCount = 0;
@@ -962,6 +966,12 @@ async function handleApiRequestInternal(req: Request, env?: Record<string, any>)
 
           const rawSlug = item.slug || item.title.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
           const slug = `${rawSlug}-${Date.now().toString().slice(-4)}`;
+          const requestedCategory = typeof item.category === 'string' ? item.category.trim() : '';
+          const itemCategory = requestedCategory || activeCategories[0].name;
+          if (!activeCategories.some((category) => category.name.toLowerCase() === itemCategory.toLowerCase())) {
+            failCount++;
+            continue;
+          }
 
           const r2Key = `templates/${slug}.html`;
 
@@ -969,7 +979,7 @@ async function handleApiRequestInternal(req: Request, env?: Record<string, any>)
             const saved = await saveTemplate(tursoClient, {
               title: item.title.trim(),
               slug,
-              category: item.category?.trim() || 'General',
+              category: itemCategory,
               tags: Array.isArray(item.tags) ? item.tags : [],
               html_content: item.html_content,
               r2_key: r2Key,
@@ -1009,6 +1019,11 @@ async function handleApiRequestInternal(req: Request, env?: Record<string, any>)
         if (!title || !slug || !html_content) {
           return json({ success: false, error: 'Title, slug, and html_content are required.' }, 400);
         }
+        const categoryName = typeof category === 'string' ? category.trim() : '';
+        const activeCategories = await getPublicCategories(tursoClient);
+        if (!activeCategories.some((item) => item.name.toLowerCase() === categoryName.toLowerCase())) {
+          return json({ success: false, error: 'Select an active category for this template.' }, 400);
+        }
 
         const normalizedSlug = slug.trim().toLowerCase();
         const r2Key = `templates/${normalizedSlug}.html`;
@@ -1017,7 +1032,7 @@ async function handleApiRequestInternal(req: Request, env?: Record<string, any>)
           id,
           title: title.trim(),
           slug: normalizedSlug,
-          category: category?.trim() || 'General',
+          category: categoryName,
           tags: Array.isArray(tags) ? tags : [],
           description: typeof description === 'string' ? description.trim() : undefined,
           html_content,

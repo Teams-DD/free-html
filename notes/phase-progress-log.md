@@ -65,10 +65,12 @@
 - Approval: user approved Phase 06 on 2026-10-16.
 - Routes: `/`, `/popular`, `/categories/{slug}`, `/templates/{slug}`. Template URL preserves validated category/page/size or Popular return context; modal close restores it. Search stays client-only; legacy modal aliases and `/vcon` Admin isolation remain.
 - Added public active-category read path and valid-slug checks. Empty active categories remain valid and use the existing empty-results state.
+- Single/bulk template forms default to an active category after async category load; template save APIs reject inactive/unknown categories.
+- Schema init now has an idempotent narrow repair: only if no `General` category exists, move rows whose category is `General` to the earliest active category. This code has not run against production or any live DB.
 - Added `category_view`, `template_open`, and `download_request` daily UTC aggregates. Download event is written best-effort alongside the existing counter route.
 - Aggregate schema stores only day/event/resource slug/count/update time, prunes beyond 90 days, and exposes an authenticated admin read endpoint with a maximum 90-day date range. Public event ingestion validates active slugs and uses transient in-memory IP rate limiting; no IP/user-agent/user ID/search term/per-user history is persisted.
 - Validation: diagnostics clean on `turso.ts`, `apiHandler.ts`, and `PublicApp.tsx`. No browser history, API, migration, retention, rate-limit, or aggregate-counter runtime test was run. No schema migration or production change was executed.
-- Scope preserved: no visible UI redesign/dashboard, no search URL/analytics, no production data/settings, deployment, or cache purge.
+- Scope preserved: no visible UI redesign/dashboard, no search URL/analytics, no direct DB access/mutation, deployment, or cache purge. The conditional migration runs only on a future app schema initialization after deployment.
 - Post-deploy hotfix: browser console reported `ReferenceError: Cannot access 'dt' before initialization`; minified offset mapped to the clamp effect reading `totalPages` before its declaration. Moved the effect below `totalPages`/pagination calculation. Touched-file diagnostics pass; push/rebuild/live confirmation pending.
 
 ## Workflow Note (2026-10-16)

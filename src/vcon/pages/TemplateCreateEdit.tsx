@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   ArrowLeft,
   Save,
@@ -67,7 +67,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
   // Single file state
   const [title, setTitle] = useState(initialTemplate?.title || '');
   const [slug, setSlug] = useState(initialTemplate?.slug || '');
-  const [category, setCategory] = useState(initialTemplate?.category || 'General');
+  const [category, setCategory] = useState(initialTemplate?.category || '');
   const [tagsInput, setTagsInput] = useState(initialTemplate?.tags.join(', ') || '');
   const [description, setDescription] = useState(initialTemplate?.description || '');
   const [htmlContent, setHtmlContent] = useState(initialTemplate?.html_content || DEFAULT_HTML);
@@ -77,17 +77,24 @@ export const TemplateCreateEdit: React.FC<Props> = ({
 
   // Bulk upload state
   const [bulkQueue, setBulkQueue] = useState<QueuedFile[]>([]);
-  const [bulkCategory, setBulkCategory] = useState('General');
+  const [bulkCategory, setBulkCategory] = useState('');
   const [bulkUploading, setBulkUploading] = useState(false);
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const bulkInputRef = useRef<HTMLInputElement | null>(null);
 
-  const activeCategories = categories.filter((c) => c.status === 'active');
+  const activeCategories = useMemo(() => categories.filter((c) => c.status === 'active'), [categories]);
   const categoryOptions = activeCategories.length > 0
     ? activeCategories.map((c) => c.name)
     : ['Buttons', 'Badges', 'Forms', 'Loaders', 'Alerts', 'Cards', 'Navigation', 'General'];
+
+  useEffect(() => {
+    if (activeCategories.length === 0) return;
+    const firstCategory = activeCategories[0].name;
+    if (!activeCategories.some((item) => item.name === category)) setCategory(firstCategory);
+    if (!activeCategories.some((item) => item.name === bulkCategory)) setBulkCategory(firstCategory);
+  }, [activeCategories, bulkCategory, category]);
 
   const handleTitleChange = (val: string) => {
     setTitle(val);
