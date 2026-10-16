@@ -462,7 +462,11 @@ export const PublicApp: React.FC = () => {
                     title="Modal Preview"
                     srcDoc={activeModal.html_content}
                     sandbox="allow-scripts allow-modals"
-                    className="w-full h-full border-0 shadow-none"
+                    className={`border-0 shadow-none ${
+                      deviceSize === 'desktop'
+                        ? 'w-[133.333%] h-[133.333%] scale-75 origin-center'
+                        : 'w-full h-full'
+                    }`}
                   />
                 </div>
               ) : (
