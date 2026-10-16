@@ -292,7 +292,7 @@ export const R2Manager: React.FC<Props> = ({
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#090a0c]">
         {/* Storage Analytics & Report Card */}
-        <div className="bg-[#121317] border border-[#22242b] rounded-lg p-4 space-y-3 w-full max-w-7xl mx-auto">
+        <div className="bg-[#121317] border border-[#22242b] rounded-md p-4 space-y-3 w-full max-w-7xl mx-auto">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <BarChart3 className="w-4 h-4 text-zinc-400" />
@@ -359,7 +359,7 @@ export const R2Manager: React.FC<Props> = ({
         </div>
 
         {/* Connection Status Card */}
-        <div className="bg-[#121317] border border-[#22242b] rounded-lg p-4 space-y-3 w-full max-w-7xl mx-auto">
+        <div className="bg-[#121317] border border-[#22242b] rounded-md p-4 space-y-3 w-full max-w-7xl mx-auto">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               {status.connected ? (
@@ -442,7 +442,7 @@ export const R2Manager: React.FC<Props> = ({
 
         {/* Bucket Files Explorer */}
         {status.connected && (
-          <div className="bg-[#121317] border border-[#22242b] rounded-lg p-4 space-y-3 w-full max-w-7xl mx-auto">
+          <div className="bg-[#121317] border border-[#22242b] rounded-md p-4 space-y-3 w-full max-w-7xl mx-auto">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <FolderOpen className="w-4 h-4 text-zinc-400" />
@@ -601,7 +601,7 @@ export const R2Manager: React.FC<Props> = ({
         )}
 
         {/* R2 Credentials Form */}
-        <div className="bg-[#121317] border border-[#22242b] rounded-lg p-4 space-y-3 w-full max-w-7xl mx-auto">
+        <div className="bg-[#121317] border border-[#22242b] rounded-md p-4 space-y-3 w-full max-w-7xl mx-auto">
           <span className="font-semibold text-zinc-200 uppercase text-[10px] tracking-wider block">
             {status.configured ? 'Update R2 Credentials' : 'Add R2 Credentials'}
           </span>
@@ -720,7 +720,7 @@ export const R2Manager: React.FC<Props> = ({
         </div>
 
         {/* R2 Operations Log */}
-        <div className="bg-[#121317] border border-[#22242b] rounded-lg p-4 space-y-2 w-full max-w-7xl mx-auto">
+        <div className="bg-[#121317] border border-[#22242b] rounded-md p-4 space-y-2 w-full max-w-7xl mx-auto">
           <div className="flex items-center space-x-1.5 text-zinc-400 text-[10px] font-mono uppercase tracking-wider">
             <Terminal className="w-3.5 h-3.5 text-zinc-500" />
             <span>Diagnostic Logs</span>

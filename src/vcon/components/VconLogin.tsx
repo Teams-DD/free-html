@@ -40,7 +40,7 @@ export const VconLogin: React.FC<Props> = ({ onLoginSuccess, onSwitchToSetup }) 
 
   return (
     <div className="min-h-screen w-full bg-[#090a0c] flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-sm bg-[#121317] border border-[#22242b] rounded-lg overflow-hidden">
+      <div className="w-full max-w-sm bg-[#121317] border border-[#22242b] rounded-md overflow-hidden">
         {/* Header */}
         <div className="px-5 py-4 bg-[#0f1013] border-b border-[#1c1d22] flex items-center space-x-2.5">
           <div className="w-6 h-6 bg-[#1a1b22] border border-[#262833] rounded flex items-center justify-center text-zinc-300 font-bold text-xs">

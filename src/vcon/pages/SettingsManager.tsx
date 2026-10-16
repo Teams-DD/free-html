@@ -381,7 +381,7 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
             )}
 
             {/* Site Name & Description */}
-            <div className="bg-[#121317] border border-[#22242b] rounded-lg p-4 space-y-3">
+            <div className="bg-[#121317] border border-[#22242b] rounded-md p-4 space-y-3">
               <span className="font-semibold text-zinc-200 uppercase text-[10px] tracking-wider block">
                 Site Identity
               </span>
@@ -431,7 +431,7 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
             </div>
 
             {/* Logo, Favicon & OG Image Assets */}
-            <div className="bg-[#121317] border border-[#22242b] rounded-lg p-4 space-y-3">
+            <div className="bg-[#121317] border border-[#22242b] rounded-md p-4 space-y-3">
               <span className="font-semibold text-zinc-200 uppercase text-[10px] tracking-wider block">
                 Branding Assets
               </span>
@@ -622,7 +622,7 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
               </div>
             )}
 
-            <div className="bg-[#121317] border border-[#22242b] rounded-lg p-4 space-y-3">
+            <div className="bg-[#121317] border border-[#22242b] rounded-md p-4 space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-[#1c1d22]">
                 <span className="font-semibold text-zinc-200 uppercase text-[10px] tracking-wider">
                   Admin Users
@@ -706,7 +706,7 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
       {/* Add Admin Modal */}
       {addModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-3">
-          <div className="bg-[#121317] border border-[#22242b] rounded-lg w-full max-w-sm overflow-hidden">
+          <div className="bg-[#121317] border border-[#22242b] rounded-md w-full max-w-sm overflow-hidden">
             <div className="px-4 py-3 bg-[#0f1013] border-b border-[#1c1d22] flex items-center justify-between">
               <span className="font-semibold text-zinc-200 text-xs">Add Admin User</span>
               <button
@@ -777,7 +777,7 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
       {/* Edit Admin Modal */}
       {editModalOpen && editingAdmin && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-3">
-          <div className="bg-[#121317] border border-[#22242b] rounded-lg w-full max-w-sm overflow-hidden">
+          <div className="bg-[#121317] border border-[#22242b] rounded-md w-full max-w-sm overflow-hidden">
             <div className="px-4 py-3 bg-[#0f1013] border-b border-[#1c1d22] flex items-center justify-between">
               <span className="font-semibold text-zinc-200 text-xs">Edit Admin User</span>
               <button

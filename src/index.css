@@ -61,3 +61,16 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #2e303a;
 }
+
+:root:has(.public-app),
+:root:has(.public-app) * {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+:root:has(.public-app)::-webkit-scrollbar,
+:root:has(.public-app) *::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}

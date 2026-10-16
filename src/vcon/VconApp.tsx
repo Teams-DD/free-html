@@ -568,7 +568,7 @@ const VconAppContent: React.FC = () => {
       {/* Admin Quick Preview Modal */}
       {previewTemplate && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5">
-          <div className="bg-[#121317] border border-[#22242b] rounded-lg w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden">
+          <div className="bg-[#121317] border border-[#22242b] rounded-md w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden">
             <div className="h-11 px-4 bg-[#0f1013] border-b border-[#1c1d22] flex items-center justify-between">
               <span className="font-semibold text-zinc-200 text-xs truncate">
                 {previewTemplate.title}

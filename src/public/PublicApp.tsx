@@ -334,7 +334,7 @@ export const PublicApp: React.FC = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#090a0c] text-zinc-300 flex flex-col font-sans selection:bg-zinc-800 selection:text-zinc-200 antialiased">
+    <div className="public-app min-h-screen bg-[#090a0c] text-zinc-300 flex flex-col font-sans selection:bg-zinc-800 selection:text-zinc-200 antialiased">
       {/* Refined Minimal Header */}
       <header className="bg-[#0f1013] border-b border-zinc-800/90 px-4 py-2.5 flex items-center justify-between sticky top-0 z-30 shrink-0">
         <div className="flex items-center space-x-3">

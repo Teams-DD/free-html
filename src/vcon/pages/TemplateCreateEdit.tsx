@@ -340,7 +340,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
           {bulkQueue.length === 0 ? (
             <div
               onClick={() => bulkInputRef.current?.click()}
-              className="border border-dashed border-[#262834] hover:border-[#3a3d4f] rounded-lg p-10 flex flex-col items-center justify-center text-center cursor-pointer transition bg-[#0c0d10]"
+              className="border border-dashed border-[#262834] hover:border-[#3a3d4f] rounded-md p-10 flex flex-col items-center justify-center text-center cursor-pointer transition bg-[#0c0d10]"
             >
               <Files className="w-8 h-8 text-zinc-600 mb-2" />
               <p className="text-xs font-medium text-zinc-300 mb-1">

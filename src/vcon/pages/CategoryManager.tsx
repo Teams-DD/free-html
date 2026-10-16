@@ -325,7 +325,7 @@ export const CategoryManager: React.FC<Props> = ({
       {/* Add / Edit Category Modal */}
       {modalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-3">
-          <div className="bg-[#121317] border border-[#22242b] rounded-lg w-full max-w-sm overflow-hidden">
+          <div className="bg-[#121317] border border-[#22242b] rounded-md w-full max-w-sm overflow-hidden">
             <div className="px-4 py-3 bg-[#0f1013] border-b border-[#1c1d22] flex items-center justify-between">
               <span className="font-semibold text-zinc-200 text-xs">
                 {editingCategory ? 'Edit Category' : 'Add Category'}
