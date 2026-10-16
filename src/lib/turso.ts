@@ -53,8 +53,8 @@ let mockCategories: Category[] = INITIAL_CATEGORIES.map((name) => {
 });
 
 let mockSettings: Record<string, string> = {
-  site_name: 'HTML Snippets & Templates',
-  site_description: 'Free responsive HTML snippets and component templates directory.',
+  site_name: 'Free HTML Templates',
+  site_description: 'Browse free HTML templates and responsive website components. Preview designs, inspect source code, and download HTML snippets to customize for your project.',
   app_logo: '',
   favicon_url: '',
   og_image: '',
@@ -1445,8 +1445,8 @@ function parseTags(raw: any): string[] {
 
 export async function getSiteSettings(client: Client): Promise<SiteSettings> {
   const defaultSettings: SiteSettings = {
-    site_name: mockSettings.site_name || 'HTML Snippets & Templates',
-    site_description: mockSettings.site_description || 'Free responsive HTML snippets and component templates directory.',
+    site_name: mockSettings.site_name || 'Free HTML Templates',
+    site_description: mockSettings.site_description || 'Browse free HTML templates and responsive website components. Preview designs, inspect source code, and download HTML snippets to customize for your project.',
     app_logo: mockSettings.app_logo || '',
     favicon_url: mockSettings.favicon_url || '',
     og_image: mockSettings.og_image || '',

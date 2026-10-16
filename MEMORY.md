@@ -29,6 +29,8 @@ Source facts and runtime/deployment evidence must remain distinct. Detailed proj
 
 ## Storage and Operations
 
+- SEO Phase 8 adds route-aware metadata, the `html.vibid.my` canonical host, static WebApplication/WebSite/Organization/FAQ structured data, visible workflow/privacy/FAQ content, and crawl/icon/social assets. The static sitemap lists only `/` because template/category inventories are database-driven. Cloudflare deep links, crawlers, and social previews remain unverified; see the roadmap and implementation status.
+
 - Turso is metadata/template-content storage; R2 stores objects/assets. Source has durable template sync jobs for real Turso. Deployed DB-backed routes now fail closed instead of using mock persistence. Mock memory mode cannot persist jobs; deployed behavior is unverified.
 - `/api/status` source reuses a 30-second isolate-local result; production impact is unmeasured.
 - Root `wrangler.toml` is for Pages. `wrangler.cache.toml` currently has production-host routes; do not use it as staging.

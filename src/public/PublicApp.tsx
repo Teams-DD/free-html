@@ -27,6 +27,8 @@ const templateModalUrl = (slug: string, state: 'opened' | 'closed'): string | nu
   return `${pathname}?${state}`;
 };
 const TEMPLATE_PAGE_SIZES = [12, 24, 48];
+const CANONICAL_ORIGIN = 'https://html.vibid.my';
+const DEFAULT_SITE_DESCRIPTION = 'Browse free HTML templates and responsive website components. Preview designs, inspect source code, and download HTML snippets to customize for your project.';
 type CatalogView = 'all' | 'popular' | 'category';
 interface CatalogRouteContext {
   view: CatalogView;
@@ -71,8 +73,8 @@ export const PublicApp: React.FC = () => {
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [categoriesLoadError, setCategoriesLoadError] = useState(false);
   const [settings, setSettings] = useState<SiteSettings>({
-    site_name: 'HTML Snippets & Templates',
-    site_description: 'Free responsive HTML snippets and component templates directory.',
+    site_name: 'Free HTML Templates',
+    site_description: DEFAULT_SITE_DESCRIPTION,
     app_logo: '',
     favicon_url: '',
     og_image: '',
@@ -410,19 +412,6 @@ export const PublicApp: React.FC = () => {
           if (!devModeRef.current) setDevLogs([]);
           setSettings(data.settings);
 
-          if (data.settings.site_name) {
-            document.title = data.settings.site_name;
-            const ogTitle = document.querySelector('meta[property="og:title"]');
-            if (ogTitle) ogTitle.setAttribute('content', data.settings.site_name);
-          }
-
-          if (data.settings.site_description) {
-            const metaDesc = document.querySelector('meta[name="description"]');
-            if (metaDesc) metaDesc.setAttribute('content', data.settings.site_description);
-            const ogDesc = document.querySelector('meta[property="og:description"]');
-            if (ogDesc) ogDesc.setAttribute('content', data.settings.site_description);
-          }
-
           if (data.settings.favicon_url) {
             let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']");
             if (!link) {
@@ -525,19 +514,45 @@ export const PublicApp: React.FC = () => {
   }, [loadCategories, loadTemplates]);
 
   useEffect(() => {
-    const title = activeModal?.title || settings.site_name || 'HTML Snippets & Templates';
-    const description = activeModal?.description?.trim() || settings.site_description;
+    const configuredSiteName = settings.site_name === 'HTML Snippets & Templates'
+      ? 'Free HTML Templates'
+      : settings.site_name || 'Free HTML Templates';
+    const title = activeModal
+      ? `${activeModal.title} | Free HTML Templates`
+      : `${configuredSiteName} | Vib Tools`;
+    const configuredDescription = settings.site_description === 'Free responsive HTML snippets and component templates directory.'
+      ? DEFAULT_SITE_DESCRIPTION
+      : settings.site_description;
+    const description = activeModal?.description?.trim() || configuredDescription || DEFAULT_SITE_DESCRIPTION;
+    const pathname = window.location.pathname;
+    let canonicalPath = '/';
+    if (activeModal) {
+      const encodedSlug = encodeURIComponent(activeModal.slug);
+      const templatePath = `/templates/${encodedSlug}`;
+      const legacyPath = `/${encodedSlug}`;
+      if (pathname === templatePath || ((pathname === legacyPath) && (window.location.search.includes('opened') || window.location.search.includes('closed')))) {
+        canonicalPath = templatePath;
+      }
+    } else if (pathname === '/popular') {
+      canonicalPath = '/popular';
+    } else if (pathname.startsWith('/categories/')) {
+      const category = publicCategories.find((item) => `/categories/${encodeURIComponent(item.slug)}` === pathname);
+      if (category) canonicalPath = pathname;
+    }
+    const canonicalUrl = `${CANONICAL_ORIGIN}${canonicalPath}`;
+    const socialImage = settings.og_image || `${CANONICAL_ORIGIN}/og-image.svg`;
     document.title = title;
 
-    const ogTitle = document.querySelector('meta[property="og:title"]');
-    if (ogTitle) ogTitle.setAttribute('content', title);
-
-    const metaDescription = document.querySelector('meta[name="description"]');
-    if (metaDescription) metaDescription.setAttribute('content', description);
-
-    const ogDescription = document.querySelector('meta[property="og:description"]');
-    if (ogDescription) ogDescription.setAttribute('content', description);
-  }, [activeModal?.description, activeModal?.title, settings.site_description, settings.site_name]);
+    document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.setAttribute('href', canonicalUrl);
+    document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute('content', description);
+    document.querySelector<HTMLMetaElement>('meta[property="og:title"]')?.setAttribute('content', title);
+    document.querySelector<HTMLMetaElement>('meta[property="og:description"]')?.setAttribute('content', description);
+    document.querySelector<HTMLMetaElement>('meta[property="og:url"]')?.setAttribute('content', canonicalUrl);
+    document.querySelector<HTMLMetaElement>('meta[property="og:image"]')?.setAttribute('content', socialImage);
+    document.querySelector<HTMLMetaElement>('meta[name="twitter:title"]')?.setAttribute('content', title);
+    document.querySelector<HTMLMetaElement>('meta[name="twitter:description"]')?.setAttribute('content', description);
+    document.querySelector<HTMLMetaElement>('meta[name="twitter:image"]')?.setAttribute('content', socialImage);
+  }, [activeModal, publicCategories, settings.og_image, settings.site_description, settings.site_name]);
 
   useEffect(() => {
     if (!settings.dev_mode) return;
@@ -709,7 +724,7 @@ export const PublicApp: React.FC = () => {
               </div>
             )}
             <h1 className="truncate text-xs font-semibold tracking-tight uppercase text-zinc-200">
-              {settings.site_name || 'HTML Snippets'}
+              Free HTML Templates
             </h1>
             </div>
 
@@ -986,8 +1001,62 @@ export const PublicApp: React.FC = () => {
           </div>
         )}
 
+        <section aria-labelledby="guide-heading" className="mx-auto mt-12 max-w-3xl border-t border-zinc-800/80 pt-8 text-sm leading-6 text-zinc-400">
+          <article>
+            <h2 id="guide-heading" className="text-base font-semibold text-zinc-200">Browse, preview, and download HTML templates</h2>
+            <p className="mt-2">Find free HTML templates and website components by name, tag, or category. Preview a design, inspect its HTML, then copy the source or download a file to customize in your own editor.</p>
+          </article>
+
+          <article className="mt-7">
+            <h2 className="text-sm font-semibold text-zinc-200">How it works</h2>
+            <ol className="mt-2 list-decimal space-y-1 pl-5">
+              <li>Search template names and tags, or browse a category.</li>
+              <li>Open a template to preview it or inspect its HTML source.</li>
+              <li>Copy the code or download the HTML file and adapt it to your project.</li>
+            </ol>
+          </article>
+
+          <article className="mt-7">
+            <h2 className="text-sm font-semibold text-zinc-200">Built for quick evaluation</h2>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              <li>Searchable catalog with category and popularity browsing.</li>
+              <li>Browser previews with desktop, tablet, and mobile viewport options.</li>
+              <li>Readable HTML source that can be copied or downloaded.</li>
+            </ul>
+          </article>
+
+          <article className="mt-7">
+            <h2 className="text-sm font-semibold text-zinc-200">Privacy and usage</h2>
+            <p className="mt-2">You do not need to upload your project files. Template previews render in your browser while the service delivers catalog and template requests. Public activity is recorded as daily aggregates, not a per-user history.</p>
+          </article>
+
+          <section aria-labelledby="faq-heading" className="mt-7">
+            <h2 id="faq-heading" className="text-sm font-semibold text-zinc-200">Frequently asked questions</h2>
+            <details className="mt-3 border-b border-zinc-800/80 py-3">
+              <summary className="cursor-pointer font-medium text-zinc-300">What can I do with Free HTML Templates?</summary>
+              <p className="mt-2">Browse HTML templates, preview designs, inspect or copy the source, and download HTML files to customize in your own editor.</p>
+            </details>
+            <details className="border-b border-zinc-800/80 py-3">
+              <summary className="cursor-pointer font-medium text-zinc-300">How do I find a specific component?</summary>
+              <p className="mt-2">Search template names and tags, or browse the available categories and Popular view.</p>
+            </details>
+            <details className="border-b border-zinc-800/80 py-3">
+              <summary className="cursor-pointer font-medium text-zinc-300">Do I need an account to use the catalog?</summary>
+              <p className="mt-2">No account is needed to browse the public catalog, preview templates, inspect source code, or download HTML files.</p>
+            </details>
+            <details className="border-b border-zinc-800/80 py-3">
+              <summary className="cursor-pointer font-medium text-zinc-300">Are all templates responsive?</summary>
+              <p className="mt-2">Responsive behavior depends on each template. Use the desktop, tablet, and mobile preview modes, then test the downloaded file at your target sizes.</p>
+            </details>
+            <details className="border-b border-zinc-800/80 py-3">
+              <summary className="cursor-pointer font-medium text-zinc-300">Does the tool upload my project files?</summary>
+              <p className="mt-2">No project upload is needed. Template previews render in your browser; the service delivers catalog and template requests and records daily aggregate activity rather than a per-user history.</p>
+            </details>
+          </section>
+        </section>
+
         <footer className="mt-8 border-t border-zinc-800/80 py-3 flex flex-col items-center justify-between gap-1.5 text-[10px] text-zinc-500 sm:flex-row">
-          <span className="font-medium text-zinc-400">{settings.site_name || 'HTML Snippets'}</span>
+          <span className="font-medium text-zinc-400">{settings.site_name || 'Free HTML Templates'} · Vib Tools</span>
           <span>© {new Date().getFullYear()}</span>
         </footer>
       </main>

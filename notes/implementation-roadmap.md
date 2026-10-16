@@ -97,8 +97,20 @@
 
 **Acceptance:** production secrets/config are verified without disclosure; deployed direct routes and APIs pass smoke checks; Turso/R2 durable behavior is demonstrated; cache behavior matches policy; rollback is available and tested; production outcomes are recorded as observed evidence. No release occurs on a failed prerequisite.
 
+## Phase 8 — SEO and Crawlable Public Content — Implemented in Source; Runtime Pending
+
+**Approval:** The user's 2026-10-16 request explicitly authorizes this SEO implementation, extending the earlier Phase 6 crawler-infrastructure exclusion only for the scope below.
+
+**In scope:** optimize static and client-updated title/description/canonical/social metadata; add robots, a canonical sitemap, structured application/site/FAQ data, visible workflow/features/privacy/FAQ content, and favicon/manifest/social assets; align default public and Admin settings.
+
+**Out of scope:** SSR/prerendering, database-derived sitemap generation, Pages deep-link/fallback changes, production deployment, Search Console submission, and production settings/data changes. Use `html.vibid.my` as canonical; do not assert that the alternate host redirects to it.
+
+**Source acceptance:** initial HTML has metadata and JSON-LD; route-aware metadata follows public catalog routes; on-page FAQ text matches FAQ JSON-LD; crawl assets exist; no unsupported zero-storage or universal responsiveness claims are made. Runtime crawler, direct Pages route, social-preview, and rich-result validation remain pending.
+
+**Progress (2026-10-16):** source adds `index.html` metadata/schema, public route-aware metadata and content, SEO-aligned default settings, and `robots.txt`, `sitemap.xml`, `site.webmanifest`, SVG favicon/apple-touch/social assets. Sitemap intentionally lists only `/`; database-driven item/category URLs are not enumerated. Initial diagnostics passed for the public app/settings slice. Full build and live validation remain pending; no deployment or production setting change was performed.
+
 ## Dependency Order and Current Gate
 
 `0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7`
 
-Current state: Phase 0 is complete; Phase 1 validation prerequisites are deferred/blocked; Phases 2–4 and 6 are implemented in source with runtime verification pending; Phase 5 is deferred until post-push live testing; Phase 7 release approval is separate. Local lint/build remain blocked by missing Windows optional packages. See [implementation-status.md](implementation-status.md).
+Current state: Phase 0 is complete; Phase 1 validation prerequisites are deferred/blocked; Phases 2–4, 6, and 8 are implemented in source with runtime verification pending; Phase 5 is deferred until post-push live testing; Phase 7 release approval is separate. Local lint/build remain blocked by missing Windows optional packages. See [implementation-status.md](implementation-status.md).

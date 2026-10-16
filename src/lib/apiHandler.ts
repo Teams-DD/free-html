@@ -436,8 +436,8 @@ async function handleApiRequestInternal(req: Request, env?: Record<string, any>)
       return json({
         success: true,
         settings: {
-          site_name: 'HTML Snippets & Templates',
-          site_description: 'Free responsive HTML snippets and component templates directory.',
+          site_name: 'Free HTML Templates',
+          site_description: 'Browse free HTML templates and responsive website components. Preview designs, inspect source code, and download HTML snippets to customize for your project.',
           app_logo: '',
           favicon_url: '',
           og_image: '',

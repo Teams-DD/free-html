@@ -27,8 +27,8 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
   const [activeSubTab, setActiveSubTab] = useState<'branding' | 'admins'>('branding');
 
   // Site Branding State
-  const [siteName, setSiteName] = useState('HTML Snippets & Templates');
-  const [siteDescription, setSiteDescription] = useState('Free responsive HTML snippets and component templates directory.');
+  const [siteName, setSiteName] = useState('Free HTML Templates');
+  const [siteDescription, setSiteDescription] = useState('Browse free HTML templates and responsive website components. Preview designs, inspect source code, and download HTML snippets to customize for your project.');
   const [appLogo, setAppLogo] = useState('');
   const [faviconUrl, setFaviconUrl] = useState('');
   const [ogImage, setOgImage] = useState('');
@@ -71,7 +71,7 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
       });
       const data: any = await res.json();
       if (res.ok && data.success && data.settings) {
-        setSiteName(data.settings.site_name || 'HTML Snippets & Templates');
+        setSiteName(data.settings.site_name || 'Free HTML Templates');
         setSiteDescription(data.settings.site_description || '');
         setAppLogo(data.settings.app_logo || '');
         setFaviconUrl(data.settings.favicon_url || '');

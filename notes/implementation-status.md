@@ -13,6 +13,7 @@
 - Card previews use lazy raw-HTML iframes with an on-load indicator. Modal preview/code, desktop/tablet/mobile modes, copy, download, X/Escape close exist.
 - Modal URLs use `/{slug}?opened` and `/{slug}?closed`; direct opened routes resolve after metadata load; `popstate` synchronizes Back/Forward. `/vcon` remains Admin except the legacy public modal query route.
 - Per-template description is present in the shared model, Admin editor, API, Turso migration/read/write, and public metadata. Browser title/description update client-side; Open Graph image stays site-level.
+- SEO Phase 8 adds initial and route-aware metadata, a primary-host canonical, WebApplication/WebSite/Organization/FAQ JSON-LD, matching visible help/privacy/FAQ content, and robots/sitemap/manifest/favicon/social assets. Only `/` is in the static sitemap; crawler, Pages deep-route, and social-card behavior are unverified.
 - Admin setup/login, template/category/settings management, Turso/R2 tools, sync-job management, and deployment instructions exist in source.
 - Public category URLs resolve active category slugs; existing category labels/filter behavior and layout remain. Daily aggregate activity source exists; runtime persistence is unverified.
 
@@ -53,6 +54,7 @@
 | 5. Existing URL/metadata verification | Deferred until post-push live test; not started |
 | 6. Category routing/aggregate activity | Implemented in source; runtime verification pending |
 | 7. Production release/verification | Proposed; not approved |
+| 8. SEO and crawlable public content | Implemented in source; runtime verification pending |
 
 ## Current Workflow Gate
 
@@ -60,6 +62,15 @@
 - Phase 5 browser/runtime checks are deferred until after all approved code phases, GitHub push, and Cloudflare auto-rebuild; the user will perform the live test.
 - Phase 6 is approved and implemented in source. Phase 7 release approval remains separate; the user will push/rebuild and perform live tests after code phases.
 - Phase 1's local lint/build prerequisite remains blocked by missing Windows optional packages but does not start staging work under the user's workflow.
+
+## Phase 08 Implementation Record (2026-10-16)
+
+- Static metadata targets free HTML templates and Vib Tools, sets canonical `https://html.vibid.my/`, index/follow directives, Open Graph/Twitter fields, and WebSite, WebApplication, Organization, and FAQPage JSON-LD.
+- The public app retains configurable title/description behavior, upgrades the old generic defaults, uses a utility-focused H1, and updates canonical/social metadata for supported catalog, category, and template routes.
+- Visible workflow, feature, privacy, and FAQ sections follow the catalog. FAQ answers match the static FAQPage data. Privacy copy states project uploads are not required and public activity is recorded as daily aggregates.
+- Added `public/robots.txt`, `public/sitemap.xml`, `public/site.webmanifest`, `public/favicon.svg`, `public/apple-touch-icon.svg`, and `public/og-image.svg`. The sitemap lists only `/` because template/category data is dynamic and Cloudflare Pages direct-path handling is unverified.
+- Updated public API, Turso fallback, and Admin settings defaults. No database setting was changed; existing customized settings remain intact.
+- Initial diagnostics passed for `PublicApp.tsx`, `turso.ts`, `SettingsManager.tsx`, and `apiHandler.ts`. Build, metadata/schema validators, live deep links, Google Search Console, and social crawler behavior remain unverified. No deployment or production mutation occurred.
 
 ## Admin Tab Refresh Fix (2026-10-16)
 
