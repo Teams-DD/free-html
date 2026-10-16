@@ -921,7 +921,7 @@ export async function getTemplates(
 
 export async function getPublicTemplateMetadata(
   client: Client,
-  options?: { category?: string; search?: string; sort?: 'newest' | 'downloads' | 'views' }
+  options?: { category?: string; search?: string; slug?: string; sort?: 'newest' | 'downloads' | 'views' }
 ): Promise<PublicTemplateMetadata[]> {
   const toMetadata = (item: HtmlTemplate): PublicTemplateMetadata => {
     const cleanTitle = item.title.toLowerCase().includes('neon') ? 'Minimal Dark Button' : item.title;
@@ -931,6 +931,10 @@ export async function getPublicTemplateMetadata(
 
   if (isMockClient(client)) {
     let result = [...mockTemplates];
+
+    if (options?.slug) {
+      result = result.filter((item) => item.slug === options.slug);
+    }
 
     if (options?.category && options.category !== 'all') {
       result = result.filter((item) => item.category.toLowerCase() === options.category!.toLowerCase());
@@ -958,10 +962,15 @@ export async function getPublicTemplateMetadata(
   }
 
   try {
-    let query = `SELECT id, title, slug, category, tags, description, r2_key, r2_url, file_size, downloads, views, created_at, updated_at
+    let query = `SELECT id, title, slug, category, tags, description, seo_title, seo_description, seo_keywords, r2_key, r2_url, file_size, downloads, views, created_at, updated_at
                  FROM templates`;
     const conditions: string[] = [];
     const args: string[] = [];
+
+    if (options?.slug) {
+      conditions.push('slug = ?');
+      args.push(options.slug);
+    }
 
     if (options?.category && options.category !== 'all') {
       conditions.push('LOWER(category) = LOWER(?)');

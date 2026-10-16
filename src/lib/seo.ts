@@ -33,9 +33,9 @@ const keywords = (value: string | null | undefined, defaults: string[]): string 
   return output.join(', ');
 };
 
-const resolveMetadata = (fields: SeoFields, defaults: SeoMetadata): SeoMetadata => ({
+const resolveMetadata = (fields: SeoFields, defaults: SeoMetadata, descriptionLength = 160): SeoMetadata => ({
   title: compact(fields.seo_title, 70) || compact(defaults.title, 70),
-  description: compact(fields.seo_description, 160) || compact(defaults.description, 160),
+  description: compact(fields.seo_description, descriptionLength) || compact(defaults.description, descriptionLength),
   keywords: keywords(fields.seo_keywords, defaults.keywords.split(', ')),
 });
 
@@ -69,5 +69,5 @@ export const getTemplateSeoMetadata = (template: Pick<HtmlTemplate, 'title' | 'c
     title: `${title} HTML Template | Vib Tools`,
     description: template.description || `Preview and download the ${title} HTML template. Inspect its source code and customize this ${category} component for your project.`,
     keywords: [title, `${category} HTML components`, 'free HTML templates', 'HTML snippets', ...template.tags].join(', '),
-  });
+  }, 145);
 };

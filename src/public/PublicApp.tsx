@@ -727,7 +727,7 @@ export const PublicApp: React.FC = () => {
               </div>
             )}
             <h1 className="truncate text-xs font-semibold tracking-tight uppercase text-zinc-200">
-              Free HTML Templates
+              {activeModal?.title || 'Free HTML Templates'}
             </h1>
             </div>
 
@@ -1002,6 +1002,25 @@ export const PublicApp: React.FC = () => {
               </button>
             </div>
           </div>
+        )}
+
+        {activeModal && (
+          <section aria-labelledby="template-detail-heading" className="mx-auto mt-8 max-w-3xl border-t border-zinc-800/80 pt-6 text-sm leading-6 text-zinc-400">
+            <h2 id="template-detail-heading" className="text-base font-semibold text-zinc-200">About {activeModal.title}</h2>
+            <p className="mt-2">{getTemplateSeoMetadata(activeModal).description}</p>
+            <p className="mt-2">Preview the component at different screen sizes, inspect its HTML, and test the downloaded file in your project before publishing.</p>
+            <nav aria-label="Related template pages" className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
+              {publicCategories.find((item) => item.name.toLowerCase() === activeModal.category.toLowerCase()) && (
+                <a
+                  href={`/categories/${encodeURIComponent(publicCategories.find((item) => item.name.toLowerCase() === activeModal.category.toLowerCase())!.slug)}`}
+                  className="text-emerald-400 underline underline-offset-4 hover:text-emerald-300"
+                >
+                  Browse {activeModal.category} templates
+                </a>
+              )}
+              <a href="/" className="text-emerald-400 underline underline-offset-4 hover:text-emerald-300">Browse all HTML templates</a>
+            </nav>
+          </section>
         )}
 
         <section aria-labelledby="guide-heading" className="mx-auto mt-12 max-w-3xl border-t border-zinc-800/80 pt-8 text-sm leading-6 text-zinc-400">
