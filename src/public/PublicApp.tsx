@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Download,
   Eye,
@@ -31,6 +31,27 @@ export const PublicApp: React.FC = () => {
   const [activeModal, setActiveModal] = useState<HtmlTemplate | null>(null);
   const [viewMode, setViewMode] = useState<'preview' | 'code'>('preview');
   const [deviceSize, setDeviceSize] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
+  const previewViewportRef = useRef<HTMLDivElement>(null);
+  const [previewScale, setPreviewScale] = useState(0.5);
+
+  useEffect(() => {
+    if (!activeModal || viewMode !== 'preview' || deviceSize !== 'desktop') return;
+
+    const previewViewport = previewViewportRef.current;
+    if (!previewViewport) return;
+
+    const updatePreviewScale = () => {
+      const availableWidth = Math.max(previewViewport.clientWidth - 16, 0);
+      const availableHeight = Math.max(previewViewport.clientHeight - 16, 0);
+      setPreviewScale(Math.min(availableWidth / 1440, availableHeight / 900, 1));
+    };
+
+    const resizeObserver = new ResizeObserver(updatePreviewScale);
+    resizeObserver.observe(previewViewport);
+    updatePreviewScale();
+
+    return () => resizeObserver.disconnect();
+  }, [activeModal, deviceSize, viewMode]);
 
   // Feedback toast
   const [toastText, setToastText] = useState<string | null>(null);
@@ -447,26 +468,21 @@ export const PublicApp: React.FC = () => {
             </div>
 
             {/* Modal Body */}
-            <div className="flex-1 bg-[#0b0c0e] relative overflow-hidden flex items-center justify-center p-2">
+            <div ref={previewViewportRef} className="flex-1 bg-[#0b0c0e] relative overflow-hidden flex items-center justify-center p-2">
               {viewMode === 'preview' ? (
                 <div
-                  className={`h-full bg-[#0b0c0e] transition-all duration-200 overflow-hidden border border-zinc-800 rounded shadow-none ${
-                    deviceSize === 'mobile'
-                      ? 'w-[375px]'
-                      : deviceSize === 'tablet'
-                      ? 'w-[768px]'
-                      : 'w-full'
+                  className={`bg-[#0b0c0e] transition-all duration-200 overflow-hidden border border-zinc-800 rounded shadow-none ${
+                    deviceSize === 'desktop'
+                      ? 'absolute left-1/2 top-1/2 w-[1440px] h-[900px] origin-center'
+                      : `h-full ${deviceSize === 'mobile' ? 'w-[375px]' : 'w-[768px]'}`
                   }`}
+                  style={deviceSize === 'desktop' ? { transform: `translate(-50%, -50%) scale(${previewScale})` } : undefined}
                 >
                   <iframe
                     title="Modal Preview"
                     srcDoc={activeModal.html_content}
                     sandbox="allow-scripts allow-modals"
-                    className={`border-0 shadow-none ${
-                      deviceSize === 'desktop'
-                        ? 'w-[133.333%] h-[133.333%] scale-75 origin-center'
-                        : 'w-full h-full'
-                    }`}
+                    className="w-full h-full border-0 shadow-none"
                   />
                 </div>
               ) : (
