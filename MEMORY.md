@@ -16,7 +16,6 @@ Source facts and runtime/deployment evidence must remain distinct. Detailed proj
 ## Public Catalog
 
 - Loads site settings and the complete template metadata list. Search/category/Popular filtering and client-side pagination (12 default; 12/24/48) are present. Pagination limits rendered cards/iframes, not API payload or DB reads.
-- Public catalog uses document scrolling; its footer stays at the bottom on short pages and follows the catalog on longer pages.
 - Public cards follow `card_design_v4.html`: 4:3 preview, 6px radius, compact badges/body/stats/buttons, hover treatment. Card data/actions remain data-driven.
 - Card preview iframe uses `loading="lazy"` and a compact accessible `Loading preview...` indicator that is hidden on that iframe's load event. This is loading feedback only; it does not make requests faster.
 - View modal supports preview/code, desktop/tablet/mobile modes, copy, download, X/Escape close.

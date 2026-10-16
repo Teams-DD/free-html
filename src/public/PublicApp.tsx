@@ -798,7 +798,7 @@ export const PublicApp: React.FC = () => {
       </header>
 
       {/* Main Grid Content */}
-      <main className="flex flex-1 flex-col w-full max-w-[1440px] mx-auto p-3.5 sm:px-8 sm:py-5 lg:px-10">
+      <main className="flex-1 w-full max-w-[1440px] mx-auto p-3.5 sm:px-8 sm:py-5 lg:px-10 overflow-y-auto">
         {loading ? (
           <div className="h-64 flex flex-col items-center justify-center text-xs text-zinc-500 font-mono">
             Loading snippets...
@@ -986,7 +986,7 @@ export const PublicApp: React.FC = () => {
           </div>
         )}
 
-        <footer className="mt-auto border-t border-zinc-800/80 pt-8 pb-3 flex flex-col items-center justify-between gap-1.5 text-[10px] text-zinc-500 sm:flex-row">
+        <footer className="mt-8 border-t border-zinc-800/80 py-3 flex flex-col items-center justify-between gap-1.5 text-[10px] text-zinc-500 sm:flex-row">
           <span className="font-medium text-zinc-400">{settings.site_name || 'HTML Snippets'}</span>
           <span>© {new Date().getFullYear()}</span>
         </footer>
