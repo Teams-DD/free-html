@@ -12,6 +12,7 @@ import {
   Copy,
   Check,
   X,
+  Menu,
   Layers,
 } from 'lucide-react';
 import { Category, PublicTemplateMetadata, SiteSettings } from '../types.ts';
@@ -80,6 +81,7 @@ export const PublicApp: React.FC = () => {
 
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [devLogs, setDevLogs] = useState<DevLogEntry[]>([]);
   const devModeRef = useRef<boolean | null>(null);
 
@@ -588,6 +590,7 @@ export const PublicApp: React.FC = () => {
     lastResolvedLocationRef.current = `${window.location.pathname}${window.location.search}`;
     setSelectedCategory(category);
     setCurrentPage(1);
+    setMobileNavOpen(false);
     setModalRouteError(false);
     setCategoryRouteError(false);
     if (context.view === 'category' && context.categorySlug) {
@@ -690,9 +693,10 @@ export const PublicApp: React.FC = () => {
   return (
     <div className="public-app min-h-screen bg-[#090a0c] text-zinc-300 flex flex-col font-sans selection:bg-zinc-800 selection:text-zinc-200 antialiased">
       {/* Refined Minimal Header */}
-      <header className="bg-[#0f1013] border-b border-zinc-800/90 px-4 py-2.5 flex items-center justify-between sticky top-0 z-30 shrink-0">
-        <div className="flex items-center space-x-3">
-          <div className="flex items-center space-x-2">
+      <header className="sticky top-0 z-30 flex shrink-0 flex-col gap-2 border-b border-zinc-800/90 bg-[#0f1013] px-3 py-2.5 sm:px-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex min-w-0 items-center justify-between gap-3 md:flex-1">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex min-w-0 items-center space-x-2">
             {settings.app_logo ? (
               <img
                 src={settings.app_logo}
@@ -704,31 +708,50 @@ export const PublicApp: React.FC = () => {
                 {settings.site_name.charAt(0).toUpperCase() || 'H'}
               </div>
             )}
-            <h1 className="text-xs font-semibold tracking-tight uppercase text-zinc-200">
+            <h1 className="truncate text-xs font-semibold tracking-tight uppercase text-zinc-200">
               {settings.site_name || 'HTML Snippets'}
             </h1>
+            </div>
+
+            <nav aria-label="Catalog categories" className="hidden items-center space-x-1 pl-3 text-[11px] md:flex">
+              {categories.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => selectCategory(cat)}
+                  aria-pressed={selectedCategory === cat}
+                  className={`whitespace-nowrap rounded px-2.5 py-1 text-[11px] font-medium transition cursor-pointer shadow-none border-0 ${
+                    selectedCategory === cat
+                      ? 'bg-zinc-800 text-zinc-100'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850/60'
+                  }`}
+                >
+                  {cat === 'all' ? 'All' : cat === '__popular__' ? 'Popular' : cat}
+                </button>
+              ))}
+            </nav>
           </div>
 
-          <div className="hidden md:flex items-center space-x-1 pl-3 text-[11px]">
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => selectCategory(cat)}
-                className={`px-2.5 py-1 rounded text-[11px] font-medium transition cursor-pointer shadow-none border-0 ${
-                  selectedCategory === cat
-                    ? 'bg-zinc-800 text-zinc-100'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850/60'
-                }`}
-              >
-                {cat === 'all' ? 'All' : cat === '__popular__' ? 'Popular' : cat}
-              </button>
-            ))}
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="rounded border border-zinc-800 bg-[#131418] px-2 py-1 font-mono text-[10px] text-zinc-400 sm:hidden">
+              {snippets.length}
+            </span>
+            <button
+              type="button"
+              aria-label={mobileNavOpen ? 'Close category navigation' : 'Open category navigation'}
+              aria-expanded={mobileNavOpen}
+              aria-controls="mobile-category-navigation"
+              onClick={() => setMobileNavOpen((open) => !open)}
+              className="flex h-8 w-8 items-center justify-center rounded border border-zinc-800 bg-[#131418] text-zinc-300 transition hover:bg-zinc-800 md:hidden"
+            >
+              {mobileNavOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center space-x-2.5">
+        <div className="flex w-full items-center gap-2 md:w-auto">
           {/* Search input */}
-          <div className="relative">
+          <div className="relative min-w-0 flex-1 md:w-48 md:flex-none">
             <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-2" />
             <input
               type="text"
@@ -739,15 +762,39 @@ export const PublicApp: React.FC = () => {
                 setCurrentPage(1);
                 writeCatalogRoute(selectedCategory, 1, pageSize);
               }}
-              className="pl-8 pr-3 py-1 bg-[#131418] border border-zinc-800 rounded text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700 w-32 sm:w-48 transition shadow-none"
+              className="h-8 w-full rounded border border-zinc-800 bg-[#131418] py-1 pl-8 pr-3 text-xs text-zinc-200 placeholder-zinc-500 transition focus:outline-none focus:border-zinc-700 shadow-none"
             />
           </div>
 
           {/* Item count badge */}
-          <div className="text-[11px] text-zinc-400 font-mono bg-[#131418] border border-zinc-800 px-2.5 py-1 rounded shrink-0 shadow-none">
+          <div className="hidden shrink-0 rounded border border-zinc-800 bg-[#131418] px-2.5 py-1 font-mono text-[11px] text-zinc-400 shadow-none md:block">
             {snippets.length} Items
           </div>
         </div>
+
+        {mobileNavOpen && (
+          <nav
+            id="mobile-category-navigation"
+            aria-label="Catalog categories"
+            className="flex gap-1 overflow-x-auto border-t border-zinc-800/80 pt-2 md:hidden"
+          >
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => selectCategory(cat)}
+                aria-pressed={selectedCategory === cat}
+                className={`shrink-0 whitespace-nowrap rounded px-2.5 py-1.5 text-[11px] font-medium transition ${
+                  selectedCategory === cat
+                    ? 'bg-zinc-800 text-zinc-100'
+                    : 'text-zinc-400 hover:bg-zinc-850/60 hover:text-zinc-200'
+                }`}
+              >
+                {cat === 'all' ? 'All' : cat === '__popular__' ? 'Popular' : cat}
+              </button>
+            ))}
+          </nav>
+        )}
       </header>
 
       {/* Main Grid Content */}

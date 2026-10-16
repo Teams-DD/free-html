@@ -83,7 +83,15 @@
 - Fix: `/vcon` maps to Templates and `/vcon/{tab}` maps to each valid Admin tab. Refresh and Back/Forward synchronize tab state; internal add/edit/save/cancel transitions update the URL.
 - Validation: `VconApp.tsx` diagnostics clean; grep audit shows direct `setActiveTab` remains only in initialization/route synchronization, while tab transitions use `navigateToTab`.
 - Scope: one source file; no UI/layout redesign, data/API changes, or production operation.
-- Awaiting GitHub push/Cloudflare rebuild and user live refresh confirmation.
+- Commit `e6d5388` is pushed; Cloudflare rebuild/live refresh confirmation remains pending.
+
+## Public Header Responsive Update (2026-10-16)
+
+- Scope: public header only; existing catalog behavior and visual language retained.
+- Desktop keeps inline category navigation. Small/mobile layouts show compact branding/count/menu, full-width search, and a collapsible horizontal category strip.
+- Category selection closes the mobile strip; selectors expose active state via `aria-pressed`.
+- Validation: PublicApp diagnostics clean. No layout change outside the header and no data/API behavior changes.
+- Current header update is not yet pushed or live-tested.
 
 ## Phase 1 — Reproducible Validation and Staging Prerequisites
 

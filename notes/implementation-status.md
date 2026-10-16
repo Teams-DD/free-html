@@ -4,7 +4,7 @@
 
 - Source commit: `13faaf6ed9ec67dad5ca9a96e8e0e4701ff0a28c` on `main` (`Add card preview loading state`).
 - Package and lockfile: `0.0.5`.
-- Source worktree matched `HEAD` at the original freeze. Planning docs contained prior uncommitted edits. Approved Phase 2–4 and Phase 6 source changes are present in the worktree and remain uncommitted.
+- Source worktree matched `HEAD` at the original freeze. Approved phases and the Admin tab route fix are committed/pushed through `e6d5388`; the current public-header update is in the worktree and not yet deployed.
 - Historical pre-feature baseline: `fecafe2`, package `0.0.1`.
 
 ## Source-Implemented Behavior (Runtime Not Implied)
@@ -27,6 +27,7 @@
 - Phase 4 distinguishes template-fetch failure from valid empty results and adds card/modal iframe error feedback plus a root render recovery state.
 - Cloudflare Pages deep-link behavior and in-app “Architecture Verified” claim have not been validated by a live deployment.
 - Admin tab route state now follows `/vcon` (Templates) and `/vcon/{tab}`; refresh and Back/Forward restore the active tab. Visual layout is unchanged.
+- Public header update uses a compact mobile row, full-width search, and an expandable horizontal category nav; desktop inline navigation remains.
 
 ## Verification Status
 
