@@ -69,6 +69,7 @@ The HTML shell in [`index.html`](../index.html) contains generic site metadata. 
 - Phase 4 current source maps unexpected API exceptions to a generic 500 and safe log fields; Turso persistence failures remain sanitized 503 responses. Runtime provider behavior is unverified.
 - Phase 6 current source resolves active category slugs and records daily aggregate activity with authenticated bounded-range reads. No analytics UI was added; runtime behavior remains unverified.
 - `/vcon` and `/vcon/*` select Admin, except `/vcon?opened` or `?closed`, which are reserved for the legacy public slug route.
+- Current source stores the Admin tab in `/vcon/{tab}`; bare `/vcon` defaults to Templates. Direct-refresh behavior is source-implemented but requires post-rebuild live confirmation.
 - Admin auth, template/category/settings management, Turso/R2 management, and durable Turso-backed template sync-job code exist. Phase 2 auth hardening is now implemented in source; see [implementation-roadmap.md](implementation-roadmap.md#phase-2--admin-signing-and-access-hardening--implemented-in-source-runtime-pending) for its validation limits.
 - Source existence above does not prove browser, database, R2, cache, or production behavior.
 

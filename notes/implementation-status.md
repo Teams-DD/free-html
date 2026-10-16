@@ -26,6 +26,7 @@
 - Phase 4 moves download counting after content retrieval and browser download triggering; modal preview still uses the raw endpoint and does not increment views.
 - Phase 4 distinguishes template-fetch failure from valid empty results and adds card/modal iframe error feedback plus a root render recovery state.
 - Cloudflare Pages deep-link behavior and in-app “Architecture Verified” claim have not been validated by a live deployment.
+- Admin tab route state now follows `/vcon` (Templates) and `/vcon/{tab}`; refresh and Back/Forward restore the active tab. Visual layout is unchanged.
 
 ## Verification Status
 
@@ -58,6 +59,13 @@
 - Phase 5 browser/runtime checks are deferred until after all approved code phases, GitHub push, and Cloudflare auto-rebuild; the user will perform the live test.
 - Phase 6 is approved and implemented in source. Phase 7 release approval remains separate; the user will push/rebuild and perform live tests after code phases.
 - Phase 1's local lint/build prerequisite remains blocked by missing Windows optional packages but does not start staging work under the user's workflow.
+
+## Admin Tab Refresh Fix (2026-10-16)
+
+- Root cause: `VconApp` kept the selected Admin tab only in React state and always initialized it to `templates`; browser refresh therefore reopened the Templates dashboard.
+- Fix: `/vcon` remains the Templates default; `/vcon/{tab}` stores each valid Admin tab. Initial load and `popstate` restore the tab, and sidebar/add/edit/cancel/save transitions update the route.
+- Scope: one source file (`src/vcon/VconApp.tsx`); no sidebar layout, public routes, data, API, or auth changes.
+- Validation: changed-file diagnostics clean; the route mapping/call-site audit confirms all tab transitions use the URL-aware helper. Live Pages refresh confirmation remains pending after rebuild.
 
 ## Phase 06 Implementation Record (2026-10-16)
 

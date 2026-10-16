@@ -77,6 +77,14 @@
 - Phase 5 is a post-push verification gate; Phase 6 code was implemented under separate approval before that live test.
 - No pre-push Cloudflare access or production operation is authorized by this workflow note.
 
+## Admin Tab Refresh Hotfix (2026-10-16)
+
+- Root cause: the Admin tab was React-only state initialized to `templates`; refreshing any `/vcon` view therefore returned to Templates.
+- Fix: `/vcon` maps to Templates and `/vcon/{tab}` maps to each valid Admin tab. Refresh and Back/Forward synchronize tab state; internal add/edit/save/cancel transitions update the URL.
+- Validation: `VconApp.tsx` diagnostics clean; grep audit shows direct `setActiveTab` remains only in initialization/route synchronization, while tab transitions use `navigateToTab`.
+- Scope: one source file; no UI/layout redesign, data/API changes, or production operation.
+- Awaiting GitHub push/Cloudflare rebuild and user live refresh confirmation.
+
 ## Phase 1 — Reproducible Validation and Staging Prerequisites
 
 - Status: Started by user request on 2026-10-16; blocked; not complete.

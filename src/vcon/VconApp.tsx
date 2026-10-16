@@ -13,6 +13,15 @@ import { AdminConfirmationProvider, useAdminConfirmation } from './components/Ad
 import { HtmlTemplate, Category, SystemStatus } from '../types.ts';
 import { X } from 'lucide-react';
 
+const VCON_TABS: VconTab[] = ['templates', 'categories', 'add', 'settings', 'turso', 'r2', 'deploy'];
+
+const getAdminTabFromPath = (): VconTab => {
+  const tab = window.location.pathname.split('/').filter(Boolean)[1];
+  return VCON_TABS.includes(tab as VconTab) ? tab as VconTab : 'templates';
+};
+
+const getAdminTabPath = (tab: VconTab): string => tab === 'templates' ? '/vcon' : `/vcon/${tab}`;
+
 export const VconApp: React.FC = () => (
   <AdminConfirmationProvider>
     <VconAppContent />
@@ -23,7 +32,7 @@ const VconAppContent: React.FC = () => {
   const requestConfirmation = useAdminConfirmation();
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('vcon_admin_token'));
   const [verifying, setVerifying] = useState(true);
-  const [activeTab, setActiveTab] = useState<VconTab>('templates');
+  const [activeTab, setActiveTab] = useState<VconTab>(getAdminTabFromPath);
   const [editingTemplate, setEditingTemplate] = useState<HtmlTemplate | null>(null);
   const [previewTemplate, setPreviewTemplate] = useState<HtmlTemplate | null>(null);
 
@@ -48,6 +57,30 @@ const VconAppContent: React.FC = () => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 2500);
   };
+
+  const navigateToTab = (tab: VconTab, replace = false) => {
+    const path = getAdminTabPath(tab);
+    if (window.location.pathname !== path) {
+      if (replace) window.history.replaceState({ adminTab: tab }, '', path);
+      else window.history.pushState({ adminTab: tab }, '', path);
+    }
+    setActiveTab(tab);
+  };
+
+  useEffect(() => {
+    const syncTabFromPath = () => {
+      const tab = getAdminTabFromPath();
+      const path = getAdminTabPath(tab);
+      if (window.location.pathname !== path) {
+        window.history.replaceState({ adminTab: tab }, '', path);
+      }
+      setActiveTab(tab);
+    };
+
+    window.addEventListener('popstate', syncTabFromPath);
+    syncTabFromPath();
+    return () => window.removeEventListener('popstate', syncTabFromPath);
+  }, []);
 
   // Verify authentication token and check if admin exists in database
   useEffect(() => {
@@ -297,7 +330,7 @@ const VconAppContent: React.FC = () => {
     if (data.success) {
       showToast(payload.id ? 'Template updated' : 'Template created & published');
       await fetchTemplates();
-      setActiveTab('templates');
+      navigateToTab('templates');
       setEditingTemplate(null);
       return { success: true };
     } else {
@@ -456,7 +489,7 @@ const VconAppContent: React.FC = () => {
         activeTab={activeTab}
         onSelectTab={(tab) => {
           if (tab === 'add') setEditingTemplate(null);
-          setActiveTab(tab);
+          navigateToTab(tab);
         }}
         onLogout={handleLogout}
         tursoConnected={systemStatus.turso.connected}
@@ -474,11 +507,11 @@ const VconAppContent: React.FC = () => {
             }}
             onAddNew={() => {
               setEditingTemplate(null);
-              setActiveTab('add');
+              navigateToTab('add');
             }}
             onEdit={(tmpl) => {
               setEditingTemplate(tmpl);
-              setActiveTab('add');
+              navigateToTab('add');
             }}
             onDelete={handleDeleteTemplate}
             onBulkDelete={handleBulkDeleteTemplates}
@@ -511,7 +544,7 @@ const VconAppContent: React.FC = () => {
             onBulkUpload={handleBulkUpload}
             onCancel={() => {
               setEditingTemplate(null);
-              setActiveTab('templates');
+              navigateToTab('templates');
             }}
             r2Connected={systemStatus.r2.connected}
           />
