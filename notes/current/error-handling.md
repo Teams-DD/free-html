@@ -37,10 +37,11 @@
 ### Later phase requirements
 
 1. Phase 3 synchronization/serialization failure must not silently create stale or partial local HTML; keep the original fetched content unchanged and show a clear error.
-2. Phase 4 Blob/download-trigger failure must report failure and must not claim the file was saved.
-3. Validate message source/type before acting; invalid messages must not change editor state.
-4. Closing/changing templates must discard transient edits; no persistence unless separately approved.
-5. Phase 4 edited downloads make no metric request. Unedited metric failures remain best-effort and must not block the local download.
+2. Phase 4 source now treats missing targets, node-shape mismatches, and invalid text-node references as an edited-HTML failure; modal Download must stop rather than fall back to original content.
+3. Phase 4 Blob/download-trigger failure must report failure and must not claim the file was saved.
+4. Validate message source/type before acting; invalid messages must not change editor state.
+5. Closing/changing templates must discard transient edits; no persistence unless separately approved.
+6. Phase 4 edited downloads make no metric request. Unedited metric failures remain best-effort and must not block the local download.
 
 ## Remaining Verification Gaps
 

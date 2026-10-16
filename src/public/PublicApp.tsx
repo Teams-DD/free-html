@@ -52,12 +52,15 @@ const applyPreviewTextEdits = (html: string, edits: Record<string, PreviewTextEd
   assignPreviewTextIds(editedDocument);
   Object.entries(edits).forEach(([id, edit]) => {
     const target = editedDocument.querySelector(`[data-vib-editor-id="${id}"]`);
-    if (!target) return;
+    if (!target) throw new Error('Edited preview target is missing from the original HTML');
     const originalShape = getPreviewNodeShape(target);
-    if (originalShape.length !== edit.shape.length || originalShape.some((node, index) => node !== edit.shape[index])) return;
+    if (originalShape.length !== edit.shape.length || originalShape.some((node, index) => node !== edit.shape[index])) {
+      throw new Error('Edited preview target structure changed');
+    }
     edit.textNodes.forEach(({ index, text }) => {
       const node = target.childNodes[index];
-      if (node?.nodeType === Node.TEXT_NODE) node.textContent = text;
+      if (node?.nodeType !== Node.TEXT_NODE) throw new Error('Edited preview text node is missing');
+      node.textContent = text;
     });
   });
   editedDocument.querySelectorAll('[data-vib-editor-id]').forEach((target) => {
@@ -282,10 +285,17 @@ export const PublicApp: React.FC = () => {
     if (!activeModal || modalPreviewRenderHtml === null) return undefined;
     return createModalPreviewDocument(modalPreviewRenderHtml, activeModal.slug);
   }, [activeModal?.slug, modalPreviewRenderHtml]);
-  const modalEditedHtml = useMemo(() => {
-    if (modalPreviewHtml === null || Object.keys(modalTextEdits).length === 0) return null;
-    return applyPreviewTextEdits(modalPreviewHtml, modalTextEdits);
+  const modalEditedHtmlResult = useMemo(() => {
+    if (modalPreviewHtml === null || Object.keys(modalTextEdits).length === 0) {
+      return { html: null, error: false };
+    }
+    try {
+      return { html: applyPreviewTextEdits(modalPreviewHtml, modalTextEdits), error: false };
+    } catch {
+      return { html: null, error: true };
+    }
   }, [modalPreviewHtml, modalTextEdits]);
+  const modalEditedHtml = modalEditedHtmlResult.html;
   const templateHtmlCache = useRef(new Map<string, string>());
   const templateHtmlRequests = useRef(new Map<string, Promise<string>>());
   const snippetsRef = useRef(snippets);
@@ -1446,7 +1456,16 @@ export const PublicApp: React.FC = () => {
                 )}
 
                 <button
-                  onClick={() => handleDownload(activeModal, modalEditedHtml)}
+                  onClick={() => {
+                    if (
+                      Object.keys(modalTextEdits).length > 0 &&
+                      (modalEditedHtmlResult.error || typeof modalEditedHtml !== 'string')
+                    ) {
+                      showToast('Preview edits could not be prepared. Please review your changes.');
+                      return;
+                    }
+                    void handleDownload(activeModal, modalEditedHtml);
+                  }}
                   className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 hover:text-zinc-100 rounded text-[11px] font-medium transition flex items-center space-x-1 cursor-pointer shadow-none border-0"
                 >
                   <Download className="w-3 h-3" />

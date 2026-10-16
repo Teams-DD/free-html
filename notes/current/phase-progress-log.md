@@ -57,7 +57,8 @@
 - Modal Download uses transient edited HTML when available and skips the counter/activity POST. Edited HTML is used only for a local Blob and is not sent to the server.
 - Unedited modal Download retains the raw HTML fetch and POST metric. Card Download still calls the original shared handler path.
 - HTML view, Copy, filename, toast, routes, card preview, APIs, database, and other UI remain unchanged.
-- Validation: VS Code diagnostics report no errors in `PublicApp.tsx`. No browser/runtime/build test was run.
+- Bugfix: apply-preview now fails instead of silently skipping missing/shape-mismatched/non-text targets; modal Download blocks fallback to original HTML if edits exist but cannot be applied.
+- Validation: VS Code diagnostics report no errors in `PublicApp.tsx`. Browser/runtime/build test remains unverified because local server startup is blocked by missing `@esbuild/win32-x64`.
 
 ## Planned Phases
 

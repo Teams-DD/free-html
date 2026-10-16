@@ -73,9 +73,9 @@
 
 **Out of scope:** Changing catalog/card Download behavior unless separately approved; changing analytics schema; adding server-side save/update routes; changing filename conventions; modifying other template delivery paths.
 
-**Acceptance/result:** Modal Download uses `modalEditedHtml` when present and creates a local Blob; that branch skips the counter/activity POST and sends no edited HTML. With no edits, the existing raw fetch and counter POST remain. Card Download still uses the original one-argument handler. HTML tab and Copy remain original-source behavior; filename and toast are unchanged.
+**Acceptance/result:** Modal Download uses `modalEditedHtml` when present and creates a local Blob; that branch skips the counter/activity POST and sends no edited HTML. With no edits, the existing raw fetch and counter POST remain. Card Download still uses the original one-argument handler. HTML tab and Copy remain original-source behavior; filename and normal success toast are unchanged. If an edit cannot be applied to the original HTML, modal Download shows an error and does not download the original as edited output.
 
-**Implementation record:** `src/public/PublicApp.tsx` only. No API, database, analytics schema, route, card, HTML view, or Copy changes. VS Code diagnostics report no errors. No browser/build/runtime verification was run.
+**Implementation record:** `src/public/PublicApp.tsx` only. A bugfix makes missing/shape-mismatched/non-text edit targets fail atomically instead of silently skipping; the modal download handler blocks original-source fallback when captured edits exist but cannot be applied. No API, database, analytics schema, route, card, HTML view, or Copy changes. Focused diagnostics report no errors. Browser/build/runtime verification remains pending.
 
 ## Phase 5 — Focused Regression and Privacy Verification
 

@@ -84,3 +84,9 @@ The raw HTML GET needed to load the template remains a server read. The no-reque
 - `PublicApp.tsx` contains no localStorage, sessionStorage, IndexedDB, or cookie use. The modal iframe retains `sandbox="allow-scripts allow-modals"`; card iframe sandbox remains unchanged.
 - Browser-level checks for actual text input, tab switching, generated download contents, request traces, and storage were not run. The local server could not start: `npm run dev -- --port 4173` stopped before app startup because `@esbuild/win32-x64` is missing.
 - Phase 5 runtime acceptance is **blocked/not met**. No production/shared browser page, deployment, dependency install, or app source change was used for this phase. Phase 6 remains gated.
+
+## Phase-04 Download Bugfix
+
+- Root cause in source: `applyPreviewTextEdits` silently returned from the edit loop when the original target was missing or its child-node shape differed, then still serialized and returned the original-based HTML. The download therefore could succeed with the changed text omitted.
+- Fix: missing target, changed shape, or non-text indexed node now fails the entire edited HTML computation. Modal Download detects that failure, displays a recovery toast, and does not fall back to original HTML. Valid edited output still uses the local Blob and skips metrics; unedited/card paths remain unchanged.
+- Focused TSX diagnostics report no errors. Browser-level reproduction remains unavailable because the local dev server cannot start with the missing `@esbuild/win32-x64` dependency; this source path is not claimed as a confirmed production incident.

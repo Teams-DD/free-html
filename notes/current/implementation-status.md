@@ -18,6 +18,7 @@
 
 - Phase 2 modal preview foundation: **implemented in source** in `src/public/PublicApp.tsx`; default-on Editable switch, local raw-HTML loading/cache, sandboxed `srcDoc`, preview-local scrollbar styling, and plaintext-only text editability toggled by `postMessage` are present.
 - Phase 3 synchronizes eligible direct text-node changes into transient local HTML state using source-validated `postMessage` and a child-node shape check. Phase 4 modal Download uses that state when present and skips the metric POST; with no edits, it uses original fetched HTML and retains the POST. Card Download remains on its original path.
+- A Phase-04 bugfix now fails edited HTML generation atomically if an edit target is missing, its node shape changed, or its referenced node is not text. Modal Download shows a recovery toast and does not fall back to original HTML when captured edits cannot be applied.
 - Local edits survive Preview/HTML switching while the modal remains open. Closing/reopening or changing templates resets them to original content.
 - The editor handler itself issues no API request and no persistence is used. Existing template scripts remain enabled and may independently make requests.
 - The editor's toggle/input path makes no app API request. Template scripts remain enabled under the existing sandbox and may independently make requests; universal zero-network behavior is not established.
@@ -27,7 +28,7 @@
 
 ## Verification Record
 
-- Phase 4 validation: VS Code diagnostics for `PublicApp.tsx` report no errors. Browser interaction, app test, lint command, build, staging, and production checks were not run for this phase.
+- Phase 4 validation: VS Code diagnostics for `PublicApp.tsx` report no errors after the silent text-loss fix. Browser interaction, app test, lint command, build, staging, and production checks were not run for this phase.
 - Phase 5 source audit: source confirms the requested branches and contains no browser-storage API use in `PublicApp.tsx`; modal sandbox permissions remain unchanged. Local browser checks are blocked because `npm run dev -- --port 4173` fails before startup on missing `@esbuild/win32-x64`. Actual interaction/download/network/storage behavior is not verified; Phase 5 acceptance is incomplete.
 - Previous notes recorded `npm run lint` and `npm run build` blocked by missing Windows optional packages after the then-current lockfile install. Those outcomes are historical and were not rerun for this refresh.
 - `package.json` has no automated test script.
