@@ -31,6 +31,7 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
   const [appLogo, setAppLogo] = useState('');
   const [faviconUrl, setFaviconUrl] = useState('');
   const [ogImage, setOgImage] = useState('');
+  const [devMode, setDevMode] = useState(false);
 
   const [savingSettings, setSavingSettings] = useState(false);
   const [uploadingAsset, setUploadingAsset] = useState<string | null>(null);
@@ -74,6 +75,7 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
         setAppLogo(data.settings.app_logo || '');
         setFaviconUrl(data.settings.favicon_url || '');
         setOgImage(data.settings.og_image || '');
+        setDevMode(Boolean(data.settings.dev_mode));
       }
     } catch {
       // Keep defaults
@@ -124,6 +126,7 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
           app_logo: appLogo.trim(),
           favicon_url: faviconUrl.trim(),
           og_image: ogImage.trim(),
+          dev_mode: devMode,
         }),
       });
 
@@ -409,6 +412,22 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
                   className="w-full px-2.5 py-1.5 bg-[#0c0d10] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47] resize-none"
                 />
               </div>
+
+              <label className="flex items-center justify-between gap-4 border-t border-[#1c1d22] pt-3">
+                <span>
+                  <span className="block text-[11px] font-medium text-zinc-200">Public Dev Mode</span>
+                  <span className="mt-0.5 block text-[10px] text-zinc-500">
+                    Shows local request and browser-error diagnostics to public page visitors.
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={devMode}
+                  onChange={(event) => setDevMode(event.target.checked)}
+                  aria-label="Enable public Dev Mode"
+                  className="h-4 w-4 shrink-0 accent-zinc-300"
+                />
+              </label>
             </div>
 
             {/* Logo, Favicon & OG Image Assets */}

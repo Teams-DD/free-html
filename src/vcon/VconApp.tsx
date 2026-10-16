@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { VconSidebar, VconTab } from './components/VconSidebar.tsx';
 import { VconLogin } from './components/VconLogin.tsx';
 import { VconSetupAdmin } from './components/VconSetupAdmin.tsx';
@@ -41,6 +41,8 @@ const VconAppContent: React.FC = () => {
     turso: { configured: false, connected: false, message: 'Checking...' },
     r2: { configured: false, connected: false, message: 'Checking...' },
   });
+  const lastStatusFetchAt = useRef(0);
+  const statusRequest = useRef<Promise<void> | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -95,15 +97,27 @@ const VconAppContent: React.FC = () => {
   }, []);
 
   // Fetch status
-  const fetchStatus = useCallback(async () => {
-    try {
-      const res = await fetch('/api/status');
-      const data: any = await res.json();
-      if (data.success && data.status) {
-        setSystemStatus(data.status);
+  const fetchStatus = useCallback(async (forceRefresh = false) => {
+    if (statusRequest.current) return statusRequest.current;
+    if (!forceRefresh && Date.now() - lastStatusFetchAt.current < 30_000) return;
+
+    const request = (async () => {
+      try {
+        const res = await fetch(forceRefresh ? '/api/status?refresh=1' : '/api/status');
+        const data: any = await res.json();
+        if (data.success && data.status) {
+          setSystemStatus(data.status);
+          lastStatusFetchAt.current = Date.now();
+        }
+      } catch (err) {
+        console.error('Failed to fetch system status', err);
       }
-    } catch (err) {
-      console.error('Failed to fetch system status', err);
+    })();
+    statusRequest.current = request;
+    try {
+      await request;
+    } finally {
+      if (statusRequest.current === request) statusRequest.current = null;
     }
   }, []);
 
@@ -147,7 +161,7 @@ const VconAppContent: React.FC = () => {
 
   useEffect(() => {
     if (token) {
-      fetchStatus();
+      fetchStatus(true);
       fetchTemplates();
       fetchCategories();
     }
@@ -256,7 +270,6 @@ const VconAppContent: React.FC = () => {
     if (data.success) {
       showToast(`Uploaded ${data.uploaded} templates`);
       fetchTemplates();
-      fetchStatus();
       return { success: true, uploaded: data.uploaded, failed: data.failed };
     }
     return { success: false, error: data.error };
@@ -332,7 +345,6 @@ const VconAppContent: React.FC = () => {
     const deletedCount = results.filter(Boolean).length;
     if (deletedCount > 0) {
       await fetchTemplates();
-      fetchStatus();
     }
     showToast(
       deletedCount === ids.length
@@ -393,9 +405,6 @@ const VconAppContent: React.FC = () => {
       body: JSON.stringify(config),
     });
     const data: any = await res.json();
-    if (data.success) {
-      await fetchStatus();
-    }
     return data;
   };
 
@@ -405,9 +414,6 @@ const VconAppContent: React.FC = () => {
       headers: { Authorization: `Bearer ${token}` },
     });
     const data: any = await res.json();
-    if (data.success) {
-      await fetchStatus();
-    }
     return Boolean(data.success);
   };
 
@@ -477,7 +483,6 @@ const VconAppContent: React.FC = () => {
             loading={loadingTemplates}
             onRefresh={() => {
               fetchTemplates();
-              fetchStatus();
             }}
             onAddNew={() => {
               setEditingTemplate(null);
@@ -527,14 +532,14 @@ const VconAppContent: React.FC = () => {
         {activeTab === 'settings' && (
           <SettingsManager
             token={token}
-            onRefreshStatus={fetchStatus}
+            onRefreshStatus={() => fetchStatus(true)}
           />
         )}
 
         {activeTab === 'turso' && (
           <TursoManager
             status={systemStatus.turso}
-            onRefresh={fetchStatus}
+            onRefresh={() => fetchStatus(true)}
             onInitSchema={handleInitSchema}
             onSeedDb={handleSeedDb}
             onTestConnection={handleTestTurso}
@@ -550,7 +555,7 @@ const VconAppContent: React.FC = () => {
         {activeTab === 'r2' && (
           <R2Manager
             status={systemStatus.r2}
-            onRefresh={fetchStatus}
+            onRefresh={() => fetchStatus(true)}
             onTestConnection={handleTestR2}
             onSaveR2Config={handleSaveR2Config}
             onDeleteR2Config={handleDeleteR2Config}

@@ -11,10 +11,13 @@ import {
   X,
   Layers,
 } from 'lucide-react';
-import { HtmlTemplate, SiteSettings } from '../types.ts';
+import { PublicTemplateMetadata, SiteSettings } from '../types.ts';
+import { DevLogEntry, DevLogPanel } from './DevLogPanel.tsx';
+
+const rawTemplateUrl = (slug: string) => `/api/templates/${encodeURIComponent(slug)}/raw`;
 
 export const PublicApp: React.FC = () => {
-  const [snippets, setSnippets] = useState<HtmlTemplate[]>([]);
+  const [snippets, setSnippets] = useState<PublicTemplateMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<SiteSettings>({
     site_name: 'HTML Snippets & Templates',
@@ -22,17 +25,89 @@ export const PublicApp: React.FC = () => {
     app_logo: '',
     favicon_url: '',
     og_image: '',
+    dev_mode: false,
   });
 
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [devLogs, setDevLogs] = useState<DevLogEntry[]>([]);
+  const devModeRef = useRef<boolean | null>(null);
+
+  const addDevLog = useCallback((level: DevLogEntry['level'], message: string, details?: DevLogEntry['details']) => {
+    if (devModeRef.current === false) return;
+    setDevLogs((current) => [
+      ...current.slice(-99),
+      { time: new Date().toISOString(), level, message, details },
+    ]);
+  }, []);
+
+  const recordApiResponse = useCallback((method: string, endpoint: string, response: Response, startedAt: number) => {
+    const path = new URL(endpoint, window.location.origin).pathname
+      .replace(/^\/api\/templates\/[^/]+\/download$/, '/api/templates/:slug/download');
+    const contentLength = response.headers.get('content-length');
+    const resourceUrl = response.url || new URL(endpoint, window.location.origin).href;
+    const resourceTiming = performance.getEntriesByName(resourceUrl, 'resource').at(-1) as PerformanceResourceTiming | undefined;
+
+    addDevLog(response.ok ? 'info' : 'error', `${method} ${path} -> ${response.status}`, {
+      duration_ms: Math.round(performance.now() - startedAt),
+      content_length_header_bytes: contentLength ? Number(contentLength) : null,
+      decoded_body_bytes: resourceTiming?.decodedBodySize || null,
+      transfer_bytes: resourceTiming?.transferSize || null,
+      content_type: response.headers.get('content-type'),
+      cache_control: response.headers.get('cache-control'),
+      cf_cache_status: response.headers.get('cf-cache-status'),
+      cf_ray: response.headers.get('cf-ray'),
+      age: response.headers.get('age'),
+      server_timing: response.headers.get('server-timing'),
+    });
+  }, [addDevLog]);
+
+  const recordApiFailure = useCallback((method: string, endpoint: string, error: unknown) => {
+    const path = new URL(endpoint, window.location.origin).pathname
+      .replace(/^\/api\/templates\/[^/]+\/download$/, '/api/templates/:slug/download');
+    const errorName = error instanceof Error ? error.name : 'RequestError';
+    addDevLog('error', `${method} ${path} failed`, { error: errorName });
+  }, [addDevLog]);
 
   // Modal preview state
-  const [activeModal, setActiveModal] = useState<HtmlTemplate | null>(null);
+  const [activeModal, setActiveModal] = useState<PublicTemplateMetadata | null>(null);
   const [viewMode, setViewMode] = useState<'preview' | 'code'>('preview');
+  const [modalHtml, setModalHtml] = useState<string | null>(null);
+  const [modalHtmlError, setModalHtmlError] = useState(false);
   const [deviceSize, setDeviceSize] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const previewViewportRef = useRef<HTMLDivElement>(null);
   const [previewScale, setPreviewScale] = useState(0.5);
+  const templateHtmlCache = useRef(new Map<string, string>());
+  const templateHtmlRequests = useRef(new Map<string, Promise<string>>());
+
+  const getTemplateHtml = useCallback(async (slug: string): Promise<string> => {
+    const cachedHtml = templateHtmlCache.current.get(slug);
+    if (cachedHtml !== undefined) return cachedHtml;
+
+    const pendingRequest = templateHtmlRequests.current.get(slug);
+    if (pendingRequest) return pendingRequest;
+
+    const endpoint = rawTemplateUrl(slug);
+    const request = (async () => {
+      const startedAt = performance.now();
+      try {
+        const response = await fetch(endpoint);
+        recordApiResponse('GET', endpoint, response, startedAt);
+        if (!response.ok) throw new Error('Template content request failed');
+        const html = await response.text();
+        templateHtmlCache.current.set(slug, html);
+        return html;
+      } catch (error) {
+        recordApiFailure('GET', endpoint, error);
+        throw error;
+      } finally {
+        templateHtmlRequests.current.delete(slug);
+      }
+    })();
+
+    templateHtmlRequests.current.set(slug, request);
+    return request;
+  }, [recordApiFailure, recordApiResponse]);
 
   useEffect(() => {
     if (!activeModal || viewMode !== 'preview' || deviceSize !== 'desktop') return;
@@ -65,10 +140,14 @@ export const PublicApp: React.FC = () => {
   // Load site settings and apply dynamic SEO metadata & favicon
   useEffect(() => {
     async function loadSettings() {
+      const startedAt = performance.now();
       try {
         const res = await fetch('/api/settings');
         const data: any = await res.json();
+        recordApiResponse('GET', '/api/settings', res, startedAt);
         if (res.ok && data.success && data.settings) {
+          devModeRef.current = Boolean(data.settings.dev_mode);
+          if (!devModeRef.current) setDevLogs([]);
           setSettings(data.settings);
 
           if (data.settings.site_name) {
@@ -103,34 +182,93 @@ export const PublicApp: React.FC = () => {
             }
             ogImg.setAttribute('content', data.settings.og_image);
           }
+        } else {
+          devModeRef.current = false;
+          setDevLogs([]);
         }
-      } catch {
-        // Fallback to default
+      } catch (error) {
+        devModeRef.current = false;
+        setDevLogs([]);
+        recordApiFailure('GET', '/api/settings', error);
       }
     }
     loadSettings();
-  }, []);
+  }, [recordApiFailure, recordApiResponse]);
 
   const loadTemplates = useCallback(async () => {
+    const startedAt = performance.now();
     setLoading(true);
     try {
-      const res = await fetch('/api/templates');
+      const res = await fetch('/api/templates?metadata=1');
       const data: any = await res.json();
+      recordApiResponse('GET', '/api/templates?metadata=1', res, startedAt);
       if (res.ok && data.success) {
         setSnippets(data.items || []);
       } else {
         setSnippets([]);
       }
-    } catch {
+    } catch (error) {
+      recordApiFailure('GET', '/api/templates?metadata=1', error);
       setSnippets([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [recordApiFailure, recordApiResponse]);
+
+  useEffect(() => {
+    if (!activeModal || viewMode !== 'code' || modalHtml !== null) return;
+
+    let canceled = false;
+    setModalHtmlError(false);
+    getTemplateHtml(activeModal.slug)
+      .then((html) => {
+        if (!canceled) setModalHtml(html);
+      })
+      .catch(() => {
+        if (!canceled) setModalHtmlError(true);
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [activeModal, getTemplateHtml, modalHtml, viewMode]);
 
   useEffect(() => {
     loadTemplates();
   }, [loadTemplates]);
+
+  useEffect(() => {
+    if (!settings.dev_mode) return;
+
+    const handleError = (event: ErrorEvent) => {
+      let source = 'unavailable';
+      if (event.filename) {
+        try {
+          source = new URL(event.filename, window.location.origin).pathname;
+        } catch {
+          source = 'unavailable';
+        }
+      }
+      addDevLog('error', 'window.error', {
+        message: event.message
+          .replace(/(authorization|token|secret|password|api[_-]?key)(\s*[:=]\s*)[^\s,;]+/gi, '$1$2[redacted]')
+          .slice(0, 200),
+        source,
+        line: event.lineno,
+      });
+    };
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      const errorName = event.reason instanceof Error ? event.reason.name : typeof event.reason;
+      addDevLog('error', 'unhandledrejection', { error: errorName });
+    };
+
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleRejection);
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleRejection);
+    };
+  }, [addDevLog, settings.dev_mode]);
 
   // Categories list derived from real templates
   const categories = useMemo(() => {
@@ -151,11 +289,16 @@ export const PublicApp: React.FC = () => {
     });
   }, [snippets, selectedCategory, search]);
 
-  const handleDownload = async (item: HtmlTemplate) => {
+  const handleDownload = async (item: PublicTemplateMetadata) => {
     try {
-      fetch(`/api/templates/${item.slug}/download`, { method: 'POST' }).catch(() => {});
+      const endpoint = `/api/templates/${item.slug}/download`;
+      const startedAt = performance.now();
+      fetch(endpoint, { method: 'POST' })
+        .then((response) => recordApiResponse('POST', endpoint, response, startedAt))
+        .catch((error) => recordApiFailure('POST', endpoint, error));
 
-      const blob = new Blob([item.html_content], { type: 'text/html;charset=utf-8' });
+      const html = await getTemplateHtml(item.slug);
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -171,7 +314,7 @@ export const PublicApp: React.FC = () => {
         prev.map((s) => (s.id === item.id ? { ...s, downloads: s.downloads + 1 } : s))
       );
     } catch {
-      showToast('Download failed');
+      showToast('Failed to load template');
     }
   };
 
@@ -277,7 +420,8 @@ export const PublicApp: React.FC = () => {
                 <div className="h-56 sm:h-60 bg-[#0b0c0e] border-b border-zinc-800/80 relative overflow-hidden flex items-center justify-center">
                   <iframe
                     title={item.title}
-                    srcDoc={item.html_content}
+                    src={rawTemplateUrl(item.slug)}
+                    loading="lazy"
                     sandbox="allow-scripts"
                     className="absolute left-0 top-0 w-[400%] h-[400%] max-w-none border-0 pointer-events-none scale-[0.25] origin-top-left opacity-95 group-hover:opacity-100 transition-opacity duration-150 shadow-none"
                   />
@@ -317,6 +461,8 @@ export const PublicApp: React.FC = () => {
                       onClick={() => {
                         setActiveModal(item);
                         setViewMode('preview');
+                        setModalHtml(null);
+                        setModalHtmlError(false);
                         setDeviceSize('desktop');
                       }}
                       className="flex-1 py-1.5 px-2 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 hover:text-zinc-100 rounded text-[11px] font-medium transition flex items-center justify-center space-x-1 cursor-pointer shadow-none border-0"
@@ -334,7 +480,13 @@ export const PublicApp: React.FC = () => {
                     </button>
 
                     <button
-                      onClick={() => handleCopyCode(item.html_content)}
+                      onClick={async () => {
+                        try {
+                          handleCopyCode(await getTemplateHtml(item.slug));
+                        } catch {
+                          showToast('Failed to load HTML');
+                        }
+                      }}
                       className="p-1.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-400 hover:text-zinc-200 rounded transition flex items-center justify-center cursor-pointer shadow-none border-0"
                       title="Copy HTML"
                     >
@@ -433,7 +585,13 @@ export const PublicApp: React.FC = () => {
 
                 {viewMode === 'code' && (
                   <button
-                    onClick={() => handleCopyCode(activeModal.html_content)}
+                    onClick={async () => {
+                      try {
+                        handleCopyCode(modalHtml ?? await getTemplateHtml(activeModal.slug));
+                      } catch {
+                        showToast('Failed to load HTML');
+                      }
+                    }}
                     className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 hover:text-zinc-100 rounded text-[11px] font-medium transition flex items-center space-x-1 cursor-pointer shadow-none border-0"
                   >
                     {codeCopied ? (
@@ -480,7 +638,7 @@ export const PublicApp: React.FC = () => {
                 >
                   <iframe
                     title="Modal Preview"
-                    srcDoc={activeModal.html_content}
+                    src={rawTemplateUrl(activeModal.slug)}
                     sandbox="allow-scripts allow-modals"
                     className="w-full h-full border-0 shadow-none"
                   />
@@ -488,7 +646,7 @@ export const PublicApp: React.FC = () => {
               ) : (
                 <div className="w-full h-full bg-[#0b0c0e] p-3.5 overflow-auto shadow-none">
                   <pre className="text-zinc-300 font-mono text-[11px] leading-relaxed selection:bg-zinc-800">
-                    {activeModal.html_content}
+                    {modalHtmlError ? 'Unable to load HTML. Switch to Preview and try again.' : modalHtml ?? 'Loading HTML...'}
                   </pre>
                 </div>
               )}
@@ -503,6 +661,7 @@ export const PublicApp: React.FC = () => {
           {toastText}
         </div>
       )}
+      {settings.dev_mode && <DevLogPanel logs={devLogs} onClear={() => setDevLogs([])} />}
     </div>
   );
 };

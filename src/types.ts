@@ -14,6 +14,8 @@ export interface HtmlTemplate {
   updated_at: string;
 }
 
+export type PublicTemplateMetadata = Omit<HtmlTemplate, 'html_content'>;
+
 export interface Category {
   id: string;
   name: string;
@@ -70,6 +72,7 @@ export interface SiteSettings {
   app_logo: string;
   favicon_url: string;
   og_image: string;
+  dev_mode: boolean;
 }
 
 export interface AdminUser {

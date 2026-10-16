@@ -1,0 +1,70 @@
+name = "html-snippets-api-cache"
+main = "src/apiCacheWorker.ts"
+compatibility_date = "2026-10-16"
+workers_dev = false
+
+[cache]
+enabled = true
+
+[vars]
+PAGES_ORIGIN = "https://free-html.pages.dev"
+
+[[routes]]
+pattern = "html.vibid.my/api/settings*"
+zone_name = "vibid.my"
+
+[[routes]]
+pattern = "html.vibid.my/api/templates*"
+zone_name = "vibid.my"
+
+[[routes]]
+pattern = "html.vibid.my/api/vcon/settings*"
+zone_name = "vibid.my"
+
+[[routes]]
+pattern = "html.vibid.my/api/vcon/templates*"
+zone_name = "vibid.my"
+
+[[routes]]
+pattern = "html.vibid.my/api/vcon/seed-db*"
+zone_name = "vibid.my"
+
+[[routes]]
+pattern = "html.vibid.my/api/vcon/upload-asset*"
+zone_name = "vibid.my"
+
+[[routes]]
+pattern = "html.vibid.my/api/vcon/r2-config*"
+zone_name = "vibid.my"
+
+[[routes]]
+pattern = "html.vibid.my/api/vcon/save-env*"
+zone_name = "vibid.my"
+
+[[routes]]
+pattern = "html.vibid.my/api/r2/file*"
+zone_name = "vibid.my"
+
+[[routes]]
+pattern = "html.vibid.my/api/r2/object*"
+zone_name = "vibid.my"
+
+[[routes]]
+pattern = "html.vibid.my/api/vcon/upload-asset*"
+zone_name = "vibid.my"
+
+[[routes]]
+pattern = "html.vibid.my/api/vcon/r2-config*"
+zone_name = "vibid.my"
+
+[[routes]]
+pattern = "html.vibid.my/api/vcon/save-env*"
+zone_name = "vibid.my"
+
+[[routes]]
+pattern = "html.vibid.my/api/r2/file*"
+zone_name = "vibid.my"
+
+[[routes]]
+pattern = "html.vibid.my/api/r2/object*"
+zone_name = "vibid.my"

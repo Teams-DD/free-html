@@ -3,9 +3,15 @@ import {
   initTursoSchema,
   seedTursoDatabase,
   getTemplates,
+  getPublicTemplateMetadata,
   getTemplateBySlug,
   saveTemplate,
   deleteTemplate,
+  getTemplateHtmlForSync,
+  getTemplateSyncJob,
+  getTemplateSyncJobs,
+  completeTemplateSyncJob,
+  failTemplateSyncJob,
   incrementDownloads,
   incrementViews,
   testTursoConnection,
@@ -24,6 +30,9 @@ import {
   listNativeR2Objects,
 } from './r2.ts';
 import { createAdminToken, verifyAdminToken } from './auth.ts';
+
+const STATUS_CACHE_TTL_MS = 30_000;
+let statusCache: { expiresAt: number; status: any } | null = null;
 
 function json(data: any, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(data), {
@@ -44,10 +53,37 @@ function resolveEnv(key: string, env?: Record<string, any>): string | undefined 
   return undefined;
 }
 
+function appendAssetRevision(
+  assetUrl: string | null | undefined,
+  revision: string,
+  requestUrl: URL
+): string | null {
+  if (!assetUrl) return null;
+  if (assetUrl.startsWith('data:')) return assetUrl;
+
+  const isAbsoluteUrl = /^[a-z][a-z\d+.-]*:/i.test(assetUrl);
+  const resolvedUrl = new URL(assetUrl, requestUrl.origin);
+  resolvedUrl.searchParams.set('v', revision);
+  return isAbsoluteUrl
+    ? resolvedUrl.toString()
+    : `${resolvedUrl.pathname}${resolvedUrl.search}${resolvedUrl.hash}`;
+}
+
 export async function handleApiRequest(req: Request, env?: Record<string, any>): Promise<Response> {
+  const requestStartedAt = performance.now();
   const url = new URL(req.url);
   const pathname = url.pathname;
   const method = req.method.toUpperCase();
+  let r2ConfigReadDuration = 0;
+
+  const publicReadTimingHeaders = (tursoReadDuration: number) => ({
+    'Server-Timing': [
+      `handler;dur=${(performance.now() - requestStartedAt).toFixed(1)}`,
+      `turso_config;dur=${r2ConfigReadDuration.toFixed(1)}`,
+      `turso_read;dur=${tursoReadDuration.toFixed(1)}`,
+      'r2;desc="0 object operations"',
+    ].join(', '),
+  });
 
   if (method === 'OPTIONS') {
     return new Response(null, {
@@ -63,17 +99,44 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
   const tursoUrl = resolveEnv('TURSO_DATABASE_URL', env);
   const tursoToken = resolveEnv('TURSO_AUTH_TOKEN', env);
   const tursoClient = getTursoClient(tursoUrl, tursoToken);
+  const forceStatusRefresh = pathname === '/api/status' && method === 'GET' && url.searchParams.get('refresh') === '1';
+  if (pathname === '/api/status' && method === 'GET' && !forceStatusRefresh && statusCache && statusCache.expiresAt > Date.now()) {
+    return json({ success: true, status: statusCache.status });
+  }
+
+  const isR2FileRequest = /^\/api\/r2\/(?:file|object)(?:\/|$)/.test(pathname);
+  const isTemplateDetailRead = method === 'GET' && /^\/api\/templates\/[^/]+$/.test(pathname);
+  const isTemplateSyncWrite =
+    (pathname === '/api/vcon/templates' && method === 'POST') ||
+    (pathname === '/api/vcon/templates/bulk-upload' && method === 'POST') ||
+    (pathname === '/api/vcon/templates/sync-retry' && method === 'POST') ||
+    (/^\/api\/vcon\/templates\/[^/]+$/.test(pathname) && method === 'DELETE');
+  const needsStoredR2Config =
+    (pathname === '/api/status' && method === 'GET') ||
+    (pathname === '/api/settings' && method === 'GET') ||
+    (pathname === '/api/templates' && method === 'GET') ||
+    isTemplateDetailRead ||
+    (isR2FileRequest && ['GET', 'HEAD'].includes(method)) ||
+    ['/api/vcon/test-r2', '/api/vcon/r2-stats', '/api/vcon/r2-files'].includes(pathname) ||
+    isTemplateSyncWrite ||
+    (pathname === '/api/vcon/settings' && ['GET', 'POST'].includes(method)) ||
+    (pathname === '/api/vcon/upload-asset' && method === 'POST');
 
   // Load database-stored R2 credentials from Turso settings table if present
   let dbR2Config: any = null;
-  if (tursoClient) {
+  if (tursoClient && needsStoredR2Config) {
+    const configReadStartedAt = performance.now();
     try {
       const { getSetting } = await import('./turso.ts');
       const savedJson = await getSetting(tursoClient, 'r2_config');
       if (savedJson) {
         dbR2Config = JSON.parse(savedJson);
       }
-    } catch {}
+    } catch {
+      // Use environment-backed R2 config if the database lookup fails.
+    } finally {
+      r2ConfigReadDuration = performance.now() - configReadStartedAt;
+    }
   }
 
   const r2AccountId = dbR2Config?.accountId || resolveEnv('R2_ACCOUNT_ID', env);
@@ -90,6 +153,59 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
     accessKeyId: r2AccessKeyId,
     secretAccessKey: r2SecretAccessKey,
   });
+
+  const processTemplateSyncJob = async (job: Awaited<ReturnType<typeof getTemplateSyncJobs>>[number]) => {
+    let success = false;
+    let failureCode = job.action === 'delete' ? 'r2_delete_failed' : 'r2_upload_failed';
+
+    try {
+      if (job.action === 'delete') {
+        if (nativeBucket) {
+          const { deleteNativeR2 } = await import('./r2.ts');
+          success = (await deleteNativeR2(nativeBucket, job.object_key)).success;
+        } else if (r2Client && r2Bucket) {
+          success = (await deleteTemplateFromR2(r2Client, r2Bucket, job.object_key)).success;
+        } else {
+          failureCode = 'r2_not_configured';
+        }
+      } else if (job.template_id) {
+        const html = await getTemplateHtmlForSync(tursoClient, job.template_id);
+        if (html === null) {
+          failureCode = 'template_content_missing';
+        } else if (nativeBucket) {
+          const { uploadNativeR2 } = await import('./r2.ts');
+          success = (await uploadNativeR2(nativeBucket, job.object_key, html, r2PublicDomain)).success;
+        } else if (r2Client && r2Bucket) {
+          success = (await uploadTemplateToR2(r2Client, r2Bucket, job.object_key, html, r2PublicDomain)).success;
+        } else {
+          failureCode = 'r2_not_configured';
+        }
+      } else {
+        failureCode = 'template_reference_missing';
+      }
+    } catch {
+      success = false;
+    }
+
+    if (success) {
+      await completeTemplateSyncJob(tursoClient, job);
+      return { status: 'synced' as const };
+    }
+
+    await failTemplateSyncJob(tursoClient, job, failureCode);
+    console.warn('Template R2 sync remains pending', {
+      action: job.action,
+      object_key: job.object_key,
+      failure_code: failureCode,
+    });
+    return { status: 'pending' as const, failureCode };
+  };
+
+  const processTemplateSyncKey = async (objectKey: string) => {
+    const job = await getTemplateSyncJob(tursoClient, objectKey);
+    if (!job) return { status: 'unavailable' as const };
+    return processTemplateSyncJob(job);
+  };
 
   // GET /api/status - check system status
   if (pathname === '/api/status' && method === 'GET') {
@@ -166,6 +282,7 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
       }
     }
 
+    statusCache = { expiresAt: Date.now() + STATUS_CACHE_TTL_MS, status };
     return json({ success: true, status });
   }
 
@@ -253,6 +370,7 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
 
   // GET /api/settings - Public site branding and configuration
   if (pathname === '/api/settings' && method === 'GET') {
+    const settingsReadStartedAt = performance.now();
     try {
       const { getSiteSettings } = await import('./turso.ts');
       const settings = await getSiteSettings(tursoClient);
@@ -262,7 +380,11 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
         favicon_url: resolveFileUrl(settings.favicon_url, r2PublicDomain),
         og_image: resolveFileUrl(settings.og_image, r2PublicDomain),
       };
-      return json({ success: true, settings: mapped });
+      return json(
+        { success: true, settings: mapped },
+        200,
+        publicReadTimingHeaders(performance.now() - settingsReadStartedAt)
+      );
     } catch {
       return json({
         success: true,
@@ -273,27 +395,43 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
           favicon_url: '',
           og_image: '',
         },
-      });
+      }, 200, publicReadTimingHeaders(performance.now() - settingsReadStartedAt));
     }
   }
 
   // GET /api/templates - public list
   if (pathname === '/api/templates' && method === 'GET') {
+    const templatesReadStartedAt = performance.now();
     try {
       const category = url.searchParams.get('category') || undefined;
       const search = url.searchParams.get('search') || undefined;
       const sort = (url.searchParams.get('sort') as any) || 'newest';
 
-      const items = await getTemplates(tursoClient, { category, search, sort });
+      const options = { category, search, sort };
+      const items = url.searchParams.get('metadata') === '1'
+        ? await getPublicTemplateMetadata(tursoClient, options)
+        : await getTemplates(tursoClient, options);
       const mapped = items.map((item) => ({
         ...item,
-        r2_url: item.r2_key
-          ? getR2ObjectUrl(item.r2_key, r2PublicDomain)
-          : (item.r2_url ? resolveFileUrl(item.r2_url, r2PublicDomain) : null),
+        r2_url: appendAssetRevision(
+          item.r2_key
+            ? getR2ObjectUrl(item.r2_key, r2PublicDomain)
+            : (item.r2_url ? resolveFileUrl(item.r2_url, r2PublicDomain) : null),
+          item.updated_at || item.created_at || item.slug,
+          url
+        ),
       }));
-      return json({ success: true, count: mapped.length, items: mapped });
+      return json(
+        { success: true, count: mapped.length, items: mapped },
+        200,
+        publicReadTimingHeaders(performance.now() - templatesReadStartedAt)
+      );
     } catch (err: any) {
-      return json({ success: false, error: err?.message || 'Failed to fetch templates' }, 500);
+      return json(
+        { success: false, error: err?.message || 'Failed to fetch templates' },
+        500,
+        publicReadTimingHeaders(performance.now() - templatesReadStartedAt)
+      );
     }
   }
 
@@ -308,7 +446,7 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
       status: 200,
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'public, max-age=3600',
+        'Cache-Control': 'no-store',
       },
     });
   }
@@ -330,9 +468,17 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
     if (!template) return json({ success: false, error: 'Template not found' }, 404);
 
     if (template.r2_key) {
-      template.r2_url = getR2ObjectUrl(template.r2_key, r2PublicDomain);
+      template.r2_url = appendAssetRevision(
+        getR2ObjectUrl(template.r2_key, r2PublicDomain),
+        template.updated_at || template.created_at || template.slug,
+        url
+      );
     } else if (template.r2_url) {
-      template.r2_url = resolveFileUrl(template.r2_url, r2PublicDomain);
+      template.r2_url = appendAssetRevision(
+        resolveFileUrl(template.r2_url, r2PublicDomain),
+        template.updated_at || template.created_at || template.slug,
+        url
+      );
     }
 
     // Increment view count asynchronously
@@ -500,6 +646,29 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
       });
     }
 
+    // POST /api/vcon/templates/sync-retry - Retry durable Turso/R2 template jobs
+    if (pathname === '/api/vcon/templates/sync-retry' && method === 'POST') {
+      if (!tursoClient) return json({ success: false, error: 'Database not configured.' }, 503);
+      try {
+        const body: any = await req.json().catch(() => ({}));
+        const jobs = await getTemplateSyncJobs(tursoClient, body.force === true, 20);
+        const results = [];
+        for (const job of jobs) {
+          results.push(await processTemplateSyncJob(job));
+        }
+        const synced = results.filter((result) => result.status === 'synced').length;
+        return json({
+          success: true,
+          attempted: results.length,
+          synced,
+          pending: results.length - synced,
+          remaining: (await getTemplateSyncJobs(tursoClient, false, 20)).length,
+        });
+      } catch {
+        return json({ success: false, error: 'Failed to process template sync jobs.' }, 500);
+      }
+    }
+
     // POST /api/vcon/r2-config - Save R2 credentials into Turso database settings
     if (pathname === '/api/vcon/r2-config' && method === 'POST') {
       if (!tursoClient) {
@@ -648,6 +817,7 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
         const results: any[] = [];
         let successCount = 0;
         let failCount = 0;
+        let syncPendingCount = 0;
 
         for (const item of files) {
           if (!item.title || !item.html_content) {
@@ -658,25 +828,7 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
           const rawSlug = item.slug || item.title.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
           const slug = `${rawSlug}-${Date.now().toString().slice(-4)}`;
 
-          let r2Key: string | null = null;
-          let r2Url: string | null = null;
-
-          if (nativeBucket) {
-            const { uploadNativeR2 } = await import('./r2.ts');
-            const key = `templates/${slug}.html`;
-            const uploadRes = await uploadNativeR2(nativeBucket, key, item.html_content, r2PublicDomain);
-            if (uploadRes.success) {
-              r2Key = uploadRes.key;
-              r2Url = uploadRes.url;
-            }
-          } else if (r2Client && r2Bucket) {
-            const key = `templates/${slug}.html`;
-            const uploadRes = await uploadTemplateToR2(r2Client, r2Bucket, key, item.html_content, r2PublicDomain);
-            if (uploadRes.success) {
-              r2Key = uploadRes.key;
-              r2Url = uploadRes.url;
-            }
-          }
+          const r2Key = `templates/${slug}.html`;
 
           try {
             const saved = await saveTemplate(tursoClient, {
@@ -686,8 +838,10 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
               tags: Array.isArray(item.tags) ? item.tags : [],
               html_content: item.html_content,
               r2_key: r2Key,
-              r2_url: r2Url,
-            });
+              r2_url: getR2ObjectUrl(r2Key, r2PublicDomain),
+            }, r2Key);
+            const sync = await processTemplateSyncKey(r2Key);
+            if (sync.status !== 'synced') syncPendingCount++;
             results.push(saved);
             successCount++;
           } catch {
@@ -699,6 +853,7 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
           success: true,
           uploaded: successCount,
           failed: failCount,
+          sync_pending: syncPendingCount,
           items: results,
         });
       } catch (err: any) {
@@ -720,55 +875,27 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
           return json({ success: false, error: 'Title, slug, and html_content are required.' }, 400);
         }
 
-        let r2Key: string | null = null;
-        let r2Url: string | null = null;
-        let r2UploadError: string | undefined = undefined;
-
-        // If Cloudflare native R2 bucket is bound, use native edge storage
-        if (nativeBucket) {
-          const { uploadNativeR2 } = await import('./r2.ts');
-          const key = `templates/${slug.trim().toLowerCase()}.html`;
-          const uploadRes = await uploadNativeR2(nativeBucket, key, html_content, r2PublicDomain);
-          if (uploadRes.success) {
-            r2Key = uploadRes.key;
-            r2Url = uploadRes.url;
-          } else {
-            r2UploadError = uploadRes.error;
-          }
-        } else if (r2Client && r2Bucket) {
-          // If R2 S3 is configured, upload via S3 API
-          const key = `templates/${slug.trim().toLowerCase()}.html`;
-          const uploadRes = await uploadTemplateToR2(
-            r2Client,
-            r2Bucket,
-            key,
-            html_content,
-            r2PublicDomain
-          );
-          if (uploadRes.success) {
-            r2Key = uploadRes.key;
-            r2Url = uploadRes.url;
-          } else {
-            r2UploadError = uploadRes.error;
-          }
-        }
+        const normalizedSlug = slug.trim().toLowerCase();
+        const r2Key = `templates/${normalizedSlug}.html`;
 
         const saved = await saveTemplate(tursoClient, {
           id,
           title: title.trim(),
-          slug: slug.trim().toLowerCase(),
+          slug: normalizedSlug,
           category: category?.trim() || 'General',
           tags: Array.isArray(tags) ? tags : [],
           html_content,
           r2_key: r2Key,
-          r2_url: r2Url,
-        });
+          r2_url: getR2ObjectUrl(r2Key, r2PublicDomain),
+        }, r2Key);
+        const sync = await processTemplateSyncKey(r2Key);
 
         return json({
           success: true,
           template: saved,
-          r2Uploaded: Boolean(r2Key),
-          r2Warning: r2UploadError,
+          r2Uploaded: sync.status === 'synced',
+          r2SyncStatus: sync.status,
+          r2Warning: sync.status === 'pending' ? sync.failureCode : undefined,
         });
       } catch (err: any) {
         return json({ success: false, error: err?.message || 'Failed to save template' }, 500);
@@ -784,17 +911,15 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
       const targetId = deleteMatch[1];
       const template = await getTemplateBySlug(tursoClient, targetId);
 
-      if (template?.r2_key) {
-        if (nativeBucket) {
-          const { deleteNativeR2 } = await import('./r2.ts');
-          await deleteNativeR2(nativeBucket, template.r2_key).catch(() => {});
-        } else if (r2Client && r2Bucket) {
-          await deleteTemplateFromR2(r2Client, r2Bucket, template.r2_key).catch(() => {});
-        }
-      }
-
-      const deleted = await deleteTemplate(tursoClient, targetId);
-      return json({ success: deleted });
+      const deleted = await deleteTemplate(tursoClient, targetId, template?.r2_key || undefined);
+      const sync = deleted && template?.r2_key
+        ? await processTemplateSyncKey(template.r2_key)
+        : { status: 'not_required' as const };
+      return json({
+        success: deleted,
+        r2_key: template?.r2_key || null,
+        r2_sync_status: sync.status,
+      });
     }
 
     // GET /api/vcon/settings - Get current site settings
@@ -823,6 +948,7 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
           app_logo: body.app_logo,
           favicon_url: body.favicon_url,
           og_image: body.og_image,
+          dev_mode: body.dev_mode,
         });
         const mapped = {
           ...settings,
@@ -868,7 +994,11 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
           }
         }
 
-        return json({ success: true, url: assetUrl, key });
+        return json({
+          success: true,
+          url: appendAssetRevision(assetUrl, crypto.randomUUID(), url),
+          key,
+        });
       } catch (err: any) {
         return json({ success: false, error: err?.message || 'Failed to upload asset' }, 500);
       }

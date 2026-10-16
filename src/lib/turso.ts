@@ -1,5 +1,5 @@
 import { createClient, type Client } from '@libsql/client';
-import { HtmlTemplate, Category, SiteSettings, AdminUser } from '../types.ts';
+import { HtmlTemplate, PublicTemplateMetadata, Category, SiteSettings, AdminUser } from '../types.ts';
 import { INITIAL_SEEDS } from './initialTemplates.ts';
 
 let cachedClient: Client | null = null;
@@ -58,6 +58,7 @@ let mockSettings: Record<string, string> = {
   app_logo: '',
   favicon_url: '',
   og_image: '',
+  dev_mode: 'false',
 };
 
 let mockAdmins: Array<{
@@ -169,6 +170,21 @@ export async function initTursoSchema(client: Client): Promise<{ success: boolea
         file_size INTEGER DEFAULT 0,
         downloads INTEGER DEFAULT 0,
         views INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS template_sync_jobs (
+        object_key TEXT PRIMARY KEY,
+        action TEXT NOT NULL,
+        template_id TEXT,
+        generation INTEGER NOT NULL DEFAULT 1,
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'pending',
+        next_attempt_at TEXT,
+        last_error TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -688,6 +704,100 @@ export async function getTemplates(
   }
 }
 
+export async function getPublicTemplateMetadata(
+  client: Client,
+  options?: { category?: string; search?: string; sort?: 'newest' | 'downloads' | 'views' }
+): Promise<PublicTemplateMetadata[]> {
+  const toMetadata = (item: HtmlTemplate): PublicTemplateMetadata => {
+    const cleanTitle = item.title.toLowerCase().includes('neon') ? 'Minimal Dark Button' : item.title;
+    const { html_content: _htmlContent, ...metadata } = item;
+    return { ...metadata, title: cleanTitle };
+  };
+
+  if (isMockClient(client)) {
+    let result = [...mockTemplates];
+
+    if (options?.category && options.category !== 'all') {
+      result = result.filter((item) => item.category.toLowerCase() === options.category!.toLowerCase());
+    }
+
+    if (options?.search) {
+      const search = options.search.toLowerCase();
+      result = result.filter((item) =>
+        item.title.toLowerCase().includes(search) ||
+        item.slug.toLowerCase().includes(search) ||
+        item.category.toLowerCase().includes(search) ||
+        item.tags.some((tag) => tag.toLowerCase().includes(search))
+      );
+    }
+
+    if (options?.sort === 'downloads') {
+      result.sort((a, b) => b.downloads - a.downloads);
+    } else if (options?.sort === 'views') {
+      result.sort((a, b) => b.views - a.views);
+    } else {
+      result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    }
+
+    return result.map(toMetadata);
+  }
+
+  try {
+    let query = `SELECT id, title, slug, category, tags, r2_key, r2_url, file_size, downloads, views, created_at, updated_at
+                 FROM templates`;
+    const conditions: string[] = [];
+    const args: string[] = [];
+
+    if (options?.category && options.category !== 'all') {
+      conditions.push('LOWER(category) = LOWER(?)');
+      args.push(options.category);
+    }
+
+    if (options?.search) {
+      conditions.push('(title LIKE ? OR tags LIKE ? OR category LIKE ?)');
+      const searchTerm = `%${options.search}%`;
+      args.push(searchTerm, searchTerm, searchTerm);
+    }
+
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    if (options?.sort === 'downloads') {
+      query += ' ORDER BY downloads DESC, created_at DESC';
+    } else if (options?.sort === 'views') {
+      query += ' ORDER BY views DESC, created_at DESC';
+    } else {
+      query += ' ORDER BY created_at DESC';
+    }
+
+    const res = await client.execute({
+      sql: query,
+      args,
+    });
+
+    return res.rows.map((row: any) => {
+      const title = String(row.title || '');
+      return {
+        id: String(row.id),
+        title: title.toLowerCase().includes('neon') ? 'Minimal Dark Button' : title,
+        slug: String(row.slug),
+        category: String(row.category || 'General'),
+        tags: parseTags(row.tags),
+        r2_key: row.r2_key ? String(row.r2_key) : null,
+        r2_url: row.r2_url ? String(row.r2_url) : null,
+        file_size: Number(row.file_size || 0),
+        downloads: Number(row.downloads || 0),
+        views: Number(row.views || 0),
+        created_at: String(row.created_at || ''),
+        updated_at: String(row.updated_at || ''),
+      };
+    });
+  } catch {
+    return getPublicTemplateMetadata(fallbackMockClient, options);
+  }
+}
+
 export async function getTemplateBySlug(client: Client, slug: string): Promise<HtmlTemplate | null> {
   const mockFound = mockTemplates.find((t) => t.slug === slug || t.id === slug);
 
@@ -745,97 +855,239 @@ export async function saveTemplate(
     html_content: string;
     r2_key?: string | null;
     r2_url?: string | null;
-  }
+  },
+  syncObjectKey?: string
 ): Promise<HtmlTemplate> {
   const now = nowIso();
   const id = data.id || `tpl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const fileSize = new TextEncoder().encode(data.html_content).length;
 
   const existingIdx = mockTemplates.findIndex((t) => t.id === id || t.slug === data.slug);
-  let saved: HtmlTemplate;
+  const current = existingIdx === -1 ? undefined : mockTemplates[existingIdx];
+  const makeSaved = (targetId: string, existing?: { downloads?: number; views?: number; created_at?: string }): HtmlTemplate => ({
+    id: targetId,
+    title: data.title,
+    slug: data.slug,
+    category: data.category,
+    tags: data.tags,
+    html_content: data.html_content,
+    r2_key: data.r2_key !== undefined ? data.r2_key : current?.r2_key || null,
+    r2_url: data.r2_url !== undefined ? data.r2_url : current?.r2_url || null,
+    file_size: fileSize,
+    downloads: Number(existing?.downloads ?? current?.downloads ?? 0),
+    views: Number(existing?.views ?? current?.views ?? 0),
+    created_at: String(existing?.created_at ?? current?.created_at ?? now),
+    updated_at: now,
+  });
+  const updateMock = (saved: HtmlTemplate) => {
+    if (existingIdx === -1) mockTemplates.unshift(saved);
+    else mockTemplates[existingIdx] = saved;
+  };
 
-  if (existingIdx !== -1) {
-    const current = mockTemplates[existingIdx];
-    saved = {
-      ...current,
-      id: current.id,
-      title: data.title,
-      slug: data.slug,
-      category: data.category,
-      tags: data.tags,
-      html_content: data.html_content,
-      r2_key: data.r2_key !== undefined ? data.r2_key : current.r2_key,
-      r2_url: data.r2_url !== undefined ? data.r2_url : current.r2_url,
-      file_size: fileSize,
-      updated_at: now,
-    };
-    mockTemplates[existingIdx] = saved;
-  } else {
-    saved = {
-      id,
-      title: data.title,
-      slug: data.slug,
-      category: data.category,
-      tags: data.tags,
-      html_content: data.html_content,
-      r2_key: data.r2_key || null,
-      r2_url: data.r2_url || null,
-      file_size: fileSize,
-      downloads: 0,
-      views: 0,
-      created_at: now,
-      updated_at: now,
-    };
-    mockTemplates.unshift(saved);
+  if (isMockClient(client)) {
+    const saved = makeSaved(current?.id || id);
+    updateMock(saved);
+    return saved;
   }
-
-  if (isMockClient(client)) return saved;
 
   try {
     await initTursoSchema(client);
+    if (isMockClient(client)) {
+      const saved = makeSaved(current?.id || id);
+      updateMock(saved);
+      return saved;
+    }
+
     const tagsJson = JSON.stringify(data.tags || []);
     const existing = await client.execute({
-      sql: 'SELECT id FROM templates WHERE id = ? OR slug = ? LIMIT 1',
+      sql: 'SELECT id, downloads, views, created_at FROM templates WHERE id = ? OR slug = ? LIMIT 1',
       args: [id, data.slug],
     });
+    const existingRow = existing.rows[0] as any;
+    const targetId = existingRow ? String(existingRow.id) : id;
+    const saved = makeSaved(targetId, existingRow);
+    const templateStatement = existingRow
+      ? {
+          sql: `UPDATE templates
+                SET title = ?, slug = ?, category = ?, tags = ?, html_content = ?, r2_key = ?, r2_url = ?, file_size = ?, updated_at = ?
+                WHERE id = ?`,
+          args: [data.title, data.slug, data.category, tagsJson, data.html_content, saved.r2_key, saved.r2_url, fileSize, now, targetId],
+        }
+      : {
+          sql: `INSERT INTO templates (id, title, slug, category, tags, html_content, r2_key, r2_url, file_size, downloads, views, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`,
+          args: [targetId, data.title, data.slug, data.category, tagsJson, data.html_content, saved.r2_key, saved.r2_url, fileSize, now, now],
+        };
 
-    if (existing.rows.length > 0) {
-      const targetId = String(existing.rows[0].id);
-      await client.execute({
-        sql: `UPDATE templates
-              SET title = ?, slug = ?, category = ?, tags = ?, html_content = ?, r2_key = ?, r2_url = ?, file_size = ?, updated_at = ?
-              WHERE id = ?`,
-        args: [data.title, data.slug, data.category, tagsJson, data.html_content, data.r2_key || null, data.r2_url || null, fileSize, now, targetId],
-      });
+    if (syncObjectKey) {
+      await client.batch([
+        templateStatement,
+        {
+          sql: `INSERT INTO template_sync_jobs (object_key, action, template_id, attempt_count, status, next_attempt_at, last_error, created_at, updated_at)
+                VALUES (?, 'upload', ?, 0, 'pending', ?, NULL, ?, ?)
+                ON CONFLICT(object_key) DO UPDATE SET action = 'upload', template_id = excluded.template_id,
+                  generation = template_sync_jobs.generation + 1, attempt_count = 0,
+                  status = 'pending', next_attempt_at = excluded.next_attempt_at,
+                  last_error = NULL, updated_at = excluded.updated_at`,
+          args: [syncObjectKey, targetId, now, now, now],
+        },
+      ], 'write');
     } else {
-      await client.execute({
-        sql: `INSERT INTO templates (id, title, slug, category, tags, html_content, r2_key, r2_url, file_size, downloads, views, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`,
-        args: [id, data.title, data.slug, data.category, tagsJson, data.html_content, data.r2_key || null, data.r2_url || null, fileSize, now, now],
-      });
+      await client.execute(templateStatement);
     }
-  } catch (err) {
-    console.warn('Failed to persist template to Turso:', err);
-  }
 
-  return saved;
+    updateMock(saved);
+    return saved;
+  } catch (err) {
+    if (syncObjectKey) throw err;
+    console.warn('Failed to persist template to Turso:', err);
+    const saved = makeSaved(current?.id || id);
+    updateMock(saved);
+    return saved;
+  }
 }
 
-export async function deleteTemplate(client: Client, id: string): Promise<boolean> {
+export async function deleteTemplate(client: Client, id: string, syncObjectKey?: string): Promise<boolean> {
   const initialLength = mockTemplates.length;
-  mockTemplates = mockTemplates.filter((t) => t.id !== id && t.slug !== id);
+  const removeMock = () => {
+    mockTemplates = mockTemplates.filter((t) => t.id !== id && t.slug !== id);
+    return mockTemplates.length < initialLength;
+  };
 
-  if (isMockClient(client)) return mockTemplates.length < initialLength;
+  if (isMockClient(client)) return removeMock();
 
   try {
-    const res = await client.execute({
+    await initTursoSchema(client);
+    if (isMockClient(client)) return removeMock();
+
+    const deleteStatement = {
       sql: 'DELETE FROM templates WHERE id = ? OR slug = ?',
       args: [id, id],
-    });
-    return res.rowsAffected > 0;
-  } catch {
+    };
+    let result;
+    if (syncObjectKey) {
+      const now = nowIso();
+      [result] = await client.batch([
+        deleteStatement,
+        {
+          sql: `INSERT INTO template_sync_jobs (object_key, action, template_id, attempt_count, status, next_attempt_at, last_error, created_at, updated_at)
+                VALUES (?, 'delete', NULL, 0, 'pending', ?, NULL, ?, ?)
+                ON CONFLICT(object_key) DO UPDATE SET action = 'delete', template_id = NULL,
+                  generation = template_sync_jobs.generation + 1, attempt_count = 0,
+                  status = 'pending', next_attempt_at = excluded.next_attempt_at,
+                  last_error = NULL, updated_at = excluded.updated_at`,
+          args: [syncObjectKey, now, now, now],
+        },
+      ], 'write');
+    } else {
+      result = await client.execute(deleteStatement);
+    }
+
+    removeMock();
+    return result.rowsAffected > 0;
+  } catch (err) {
+    if (syncObjectKey) throw err;
     return mockTemplates.length < initialLength;
   }
+}
+
+export interface TemplateSyncJob {
+  object_key: string;
+  action: 'upload' | 'delete';
+  template_id: string | null;
+  generation: number;
+  attempt_count: number;
+  status: 'pending' | 'failed';
+  next_attempt_at: string | null;
+}
+
+const mapTemplateSyncJob = (row: any): TemplateSyncJob => ({
+  object_key: String(row.object_key),
+  action: row.action === 'delete' ? 'delete' : 'upload',
+  template_id: row.template_id ? String(row.template_id) : null,
+  generation: Number(row.generation || 1),
+  attempt_count: Number(row.attempt_count || 0),
+  status: row.status === 'failed' ? 'failed' : 'pending',
+  next_attempt_at: row.next_attempt_at ? String(row.next_attempt_at) : null,
+});
+
+export async function getTemplateHtmlForSync(client: Client, templateId: string): Promise<string | null> {
+  if (isMockClient(client)) {
+    return mockTemplates.find((item) => item.id === templateId)?.html_content || null;
+  }
+
+  const result = await client.execute({
+    sql: 'SELECT html_content FROM templates WHERE id = ? LIMIT 1',
+    args: [templateId],
+  });
+  return result.rows[0] ? String(result.rows[0].html_content || '') : null;
+}
+
+export async function getTemplateSyncJob(client: Client, objectKey: string): Promise<TemplateSyncJob | null> {
+  if (isMockClient(client)) return null;
+  await initTursoSchema(client);
+  if (isMockClient(client)) return null;
+
+  const result = await client.execute({
+    sql: `SELECT object_key, action, template_id, generation, attempt_count, status, next_attempt_at
+          FROM template_sync_jobs WHERE object_key = ? LIMIT 1`,
+    args: [objectKey],
+  });
+  return result.rows[0] ? mapTemplateSyncJob(result.rows[0]) : null;
+}
+
+export async function getTemplateSyncJobs(
+  client: Client,
+  force = false,
+  limit = 20
+): Promise<TemplateSyncJob[]> {
+  if (isMockClient(client)) return [];
+  await initTursoSchema(client);
+  if (isMockClient(client)) return [];
+
+  const now = nowIso();
+  if (force) {
+    await client.execute({
+      sql: `UPDATE template_sync_jobs SET status = 'pending', attempt_count = 0,
+            next_attempt_at = ?, last_error = NULL, updated_at = ? WHERE status = 'failed'`,
+      args: [now, now],
+    });
+  }
+
+  const result = await client.execute({
+    sql: `SELECT object_key, action, template_id, generation, attempt_count, status, next_attempt_at
+          FROM template_sync_jobs
+          WHERE status = 'pending' AND next_attempt_at <= ?
+          ORDER BY updated_at ASC LIMIT ?`,
+    args: [now, Math.min(Math.max(limit, 1), 20)],
+  });
+  return result.rows.map(mapTemplateSyncJob);
+}
+
+export async function completeTemplateSyncJob(client: Client, job: TemplateSyncJob): Promise<void> {
+  if (isMockClient(client)) return;
+  await client.execute({
+    sql: 'DELETE FROM template_sync_jobs WHERE object_key = ? AND generation = ?',
+    args: [job.object_key, job.generation],
+  });
+}
+
+export async function failTemplateSyncJob(
+  client: Client,
+  job: TemplateSyncJob,
+  failureCode: string
+): Promise<void> {
+  if (isMockClient(client)) return;
+  const attemptCount = job.attempt_count + 1;
+  const exhausted = attemptCount >= 5;
+  const delaySeconds = Math.min(30 * (2 ** (attemptCount - 1)), 1800);
+  const nextAttempt = exhausted ? null : new Date(Date.now() + delaySeconds * 1000).toISOString();
+  const now = nowIso();
+  await client.execute({
+    sql: `UPDATE template_sync_jobs SET attempt_count = ?, status = ?, next_attempt_at = ?,
+          last_error = ?, updated_at = ? WHERE object_key = ? AND generation = ?`,
+        args: [attemptCount, exhausted ? 'failed' : 'pending', nextAttempt, failureCode.slice(0, 80), now, job.object_key, job.generation],
+  });
 }
 
 export async function incrementDownloads(client: Client, id: string): Promise<number> {
@@ -992,6 +1244,7 @@ export async function getSiteSettings(client: Client): Promise<SiteSettings> {
     app_logo: mockSettings.app_logo || '',
     favicon_url: mockSettings.favicon_url || '',
     og_image: mockSettings.og_image || '',
+    dev_mode: mockSettings.dev_mode === 'true',
   };
 
   if (isMockClient(client)) {
@@ -1001,7 +1254,7 @@ export async function getSiteSettings(client: Client): Promise<SiteSettings> {
   try {
     await initTursoSchema(client);
     const res = await client.execute({
-      sql: `SELECT key, value FROM settings WHERE key IN ('site_name', 'site_description', 'app_logo', 'favicon_url', 'og_image')`,
+      sql: `SELECT key, value FROM settings WHERE key IN ('site_name', 'site_description', 'app_logo', 'favicon_url', 'og_image', 'dev_mode')`,
     });
     const map: Record<string, string> = {};
     for (const row of res.rows) {
@@ -1013,6 +1266,7 @@ export async function getSiteSettings(client: Client): Promise<SiteSettings> {
       app_logo: map.app_logo || defaultSettings.app_logo,
       favicon_url: map.favicon_url || defaultSettings.favicon_url,
       og_image: map.og_image || defaultSettings.og_image,
+      dev_mode: map.dev_mode === 'true',
     };
   } catch {
     return defaultSettings;
@@ -1023,7 +1277,7 @@ export async function saveSiteSettings(
   client: Client,
   settings: Partial<SiteSettings>
 ): Promise<SiteSettings> {
-  const keys: (keyof SiteSettings)[] = ['site_name', 'site_description', 'app_logo', 'favicon_url', 'og_image'];
+  const keys: (keyof SiteSettings)[] = ['site_name', 'site_description', 'app_logo', 'favicon_url', 'og_image', 'dev_mode'];
   for (const k of keys) {
     if (settings[k] !== undefined) {
       mockSettings[k] = String(settings[k] ?? '');
