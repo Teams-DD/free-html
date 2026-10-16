@@ -12,10 +12,12 @@ import {
   Image as ImageIcon,
   X,
   RefreshCw,
+  Code,
 } from 'lucide-react';
 import { AdminUser } from '../../types.ts';
 import { isValidAdminPassword } from '../../lib/authPolicy.ts';
 import { getHomeSeoMetadata } from '../../lib/seo.ts';
+import { normalizeScriptSnippet } from '../../lib/siteScripts.ts';
 import { useAdminConfirmation } from '../components/AdminConfirmation.tsx';
 
 const DEFAULT_SITE_NAME = 'Free HTML Templates';
@@ -35,7 +37,7 @@ interface Props {
 
 export const SettingsManager: React.FC<Props> = ({ token }) => {
   const requestConfirmation = useAdminConfirmation();
-  const [activeSubTab, setActiveSubTab] = useState<'branding' | 'admins'>('branding');
+  const [activeSubTab, setActiveSubTab] = useState<'branding' | 'scripts' | 'admins'>('branding');
 
   // Site Branding State
   const [siteName, setSiteName] = useState(DEFAULT_SITE_NAME);
@@ -50,10 +52,14 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
   const [faviconUrl, setFaviconUrl] = useState('');
   const [ogImage, setOgImage] = useState('');
   const [devMode, setDevMode] = useState(false);
+  const [headerScripts, setHeaderScripts] = useState('');
+  const [footerScripts, setFooterScripts] = useState('');
 
   const [savingSettings, setSavingSettings] = useState(false);
+  const [savingScripts, setSavingScripts] = useState(false);
   const [uploadingAsset, setUploadingAsset] = useState<string | null>(null);
   const [brandingFeedback, setBrandingFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [scriptsFeedback, setScriptsFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Admin Users State
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
@@ -112,6 +118,8 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
         setFaviconUrl(data.settings.favicon_url || '');
         setOgImage(data.settings.og_image || '');
         setDevMode(Boolean(data.settings.dev_mode));
+        setHeaderScripts(data.settings.header_scripts || '');
+        setFooterScripts(data.settings.footer_scripts || '');
       }
     } catch {
       // Keep defaults
@@ -222,6 +230,37 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
       setBrandingFeedback({ type: 'error', text: err?.message || 'Server error.' });
     } finally {
       setSavingSettings(false);
+    }
+  };
+
+  const handleSaveScripts = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingScripts(true);
+    setScriptsFeedback(null);
+    const normalizedHeaderScripts = normalizeScriptSnippet(headerScripts);
+    const normalizedFooterScripts = normalizeScriptSnippet(footerScripts);
+
+    try {
+      const res = await fetch('/api/vcon/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ header_scripts: normalizedHeaderScripts, footer_scripts: normalizedFooterScripts }),
+      });
+      const data: any = await res.json();
+      if (res.ok && data.success) {
+        setHeaderScripts(normalizedHeaderScripts);
+        setFooterScripts(normalizedFooterScripts);
+        setScriptsFeedback({ type: 'success', text: 'Header and footer scripts saved.' });
+      } else {
+        setScriptsFeedback({ type: 'error', text: data.error || 'Failed to save scripts.' });
+      }
+    } catch (error: any) {
+      setScriptsFeedback({ type: 'error', text: error?.message || 'Server error.' });
+    } finally {
+      setSavingScripts(false);
     }
   };
 
@@ -442,6 +481,17 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
           >
             <Users className="w-3 h-3" />
             <span>Admin Users ({adminUsers.length})</span>
+          </button>
+          <button
+            onClick={() => setActiveSubTab('scripts')}
+            className={`px-2.5 py-1 rounded transition cursor-pointer flex items-center space-x-1.5 ${
+              activeSubTab === 'scripts'
+                ? 'bg-[#181a22] text-zinc-100 border border-[#232634] font-medium'
+                : 'text-zinc-400 hover:text-zinc-300'
+            }`}
+          >
+            <Code className="w-3 h-3" />
+            <span>Scripts</span>
           </button>
         </div>
       </div>
@@ -725,6 +775,68 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
               >
                 <Save className="w-3 h-3" />
                 <span>{savingSettings ? 'Saving...' : 'Save Settings'}</span>
+              </button>
+            </div>
+          </form>
+        )}
+
+        {activeSubTab === 'scripts' && (
+          <form onSubmit={handleSaveScripts} className="mx-auto w-full max-w-5xl space-y-4">
+            {scriptsFeedback && (
+              <div
+                role="status"
+                className={`rounded border p-2.5 text-[11px] ${
+                  scriptsFeedback.type === 'success'
+                    ? 'border-emerald-900/40 bg-emerald-950/30 text-emerald-300'
+                    : 'border-rose-900/40 bg-rose-950/30 text-rose-300'
+                }`}
+              >
+                {scriptsFeedback.text}
+              </div>
+            )}
+
+            <div className="rounded-md border border-amber-900/40 bg-amber-950/20 p-3 text-[11px] leading-5 text-amber-200">
+              Code saved here runs on every public page for every visitor. Only paste scripts and embed code from sources you trust.
+            </div>
+
+            <section className="space-y-2 rounded-md border border-[#22242b] bg-[#121317] p-4">
+              <label htmlFor="header-scripts" className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-200">Header</label>
+              <p className="text-[10px] text-zinc-500">Added inside the public page head. Paste the complete provider snippet, including script tags when supplied.</p>
+              <textarea
+                id="header-scripts"
+                value={headerScripts}
+                onChange={(event) => setHeaderScripts(event.target.value)}
+                rows={12}
+                spellCheck={false}
+                aria-label="Header scripts and code"
+                placeholder={'<!-- Header scripts -->\n<script>/* trusted provider code */</script>'}
+                className="w-full resize-y rounded border border-[#22242b] bg-[#090a0c] p-3 font-mono text-[11px] leading-5 text-zinc-200 placeholder-zinc-600 focus:border-[#383b47] focus:outline-none"
+              />
+            </section>
+
+            <section className="space-y-2 rounded-md border border-[#22242b] bg-[#121317] p-4">
+              <label htmlFor="footer-scripts" className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-200">Footer</label>
+              <p className="text-[10px] text-zinc-500">Added at the end of the public page body, after the app content.</p>
+              <textarea
+                id="footer-scripts"
+                value={footerScripts}
+                onChange={(event) => setFooterScripts(event.target.value)}
+                rows={12}
+                spellCheck={false}
+                aria-label="Footer scripts and code"
+                placeholder={'<!-- Footer scripts -->\n<script>/* trusted provider code */</script>'}
+                className="w-full resize-y rounded border border-[#22242b] bg-[#090a0c] p-3 font-mono text-[11px] leading-5 text-zinc-200 placeholder-zinc-600 focus:border-[#383b47] focus:outline-none"
+              />
+            </section>
+
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={savingScripts}
+                className="flex items-center space-x-1.5 rounded border border-[#2e313c] bg-[#22242c] px-3.5 py-1.5 text-[11px] font-medium text-zinc-200 transition hover:bg-[#2b2d38] disabled:opacity-50"
+              >
+                <Save className="h-3 w-3" />
+                <span>{savingScripts ? 'Saving...' : 'Save Scripts'}</span>
               </button>
             </div>
           </form>

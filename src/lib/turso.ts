@@ -58,6 +58,8 @@ let mockSettings: Record<string, string> = {
   seo_title: '',
   seo_description: '',
   seo_keywords: '',
+  header_scripts: '',
+  footer_scripts: '',
   app_logo: '',
   favicon_url: '',
   og_image: '',
@@ -1519,6 +1521,8 @@ export async function getSiteSettings(client: Client): Promise<SiteSettings> {
     seo_title: mockSettings.seo_title || '',
     seo_description: mockSettings.seo_description || '',
     seo_keywords: mockSettings.seo_keywords || '',
+    header_scripts: mockSettings.header_scripts || '',
+    footer_scripts: mockSettings.footer_scripts || '',
     app_logo: mockSettings.app_logo || '',
     favicon_url: mockSettings.favicon_url || '',
     og_image: mockSettings.og_image || '',
@@ -1532,7 +1536,7 @@ export async function getSiteSettings(client: Client): Promise<SiteSettings> {
   try {
     await initTursoSchema(client);
     const res = await client.execute({
-      sql: `SELECT key, value FROM settings WHERE key IN ('site_name', 'site_description', 'seo_title', 'seo_description', 'seo_keywords', 'app_logo', 'favicon_url', 'og_image', 'dev_mode')`,
+      sql: `SELECT key, value FROM settings WHERE key IN ('site_name', 'site_description', 'seo_title', 'seo_description', 'seo_keywords', 'header_scripts', 'footer_scripts', 'app_logo', 'favicon_url', 'og_image', 'dev_mode')`,
     });
     const map: Record<string, string> = {};
     for (const row of res.rows) {
@@ -1544,6 +1548,8 @@ export async function getSiteSettings(client: Client): Promise<SiteSettings> {
       seo_title: map.seo_title ?? defaultSettings.seo_title,
       seo_description: map.seo_description ?? defaultSettings.seo_description,
       seo_keywords: map.seo_keywords ?? defaultSettings.seo_keywords,
+      header_scripts: map.header_scripts ?? defaultSettings.header_scripts,
+      footer_scripts: map.footer_scripts ?? defaultSettings.footer_scripts,
       app_logo: map.app_logo || defaultSettings.app_logo,
       favicon_url: map.favicon_url || defaultSettings.favicon_url,
       og_image: map.og_image || defaultSettings.og_image,
@@ -1559,7 +1565,7 @@ export async function saveSiteSettings(
   client: Client,
   settings: Partial<SiteSettings>
 ): Promise<SiteSettings> {
-  const keys: (keyof SiteSettings)[] = ['site_name', 'site_description', 'seo_title', 'seo_description', 'seo_keywords', 'app_logo', 'favicon_url', 'og_image', 'dev_mode'];
+  const keys: (keyof SiteSettings)[] = ['site_name', 'site_description', 'seo_title', 'seo_description', 'seo_keywords', 'header_scripts', 'footer_scripts', 'app_logo', 'favicon_url', 'og_image', 'dev_mode'];
   for (const k of keys) {
     if (settings[k] !== undefined) {
       mockSettings[k] = String(settings[k] ?? '');

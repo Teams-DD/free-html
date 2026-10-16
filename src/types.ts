@@ -79,6 +79,8 @@ export interface SiteSettings {
   seo_title: string;
   seo_description: string;
   seo_keywords: string;
+  header_scripts: string;
+  footer_scripts: string;
   app_logo: string;
   favicon_url: string;
   og_image: string;

@@ -111,8 +111,22 @@
 
 **Admin form follow-up (2026-10-16):** template description and SEO inputs moved from the editor metadata bar into a compact modal opened by the `SEO` button beside Save Template. Existing generated defaults, editable overrides, required SEO values, and save payload are unchanged. Modal supports close button, Done, Escape, and backdrop dismissal.
 
+## Phase 9 — Public Header/Footer Script Settings — Implemented in Source; Runtime Pending
+
+**Approval:** The user's 2026-10-16 request explicitly authorizes Admin-managed public Header/Footer code snippets.
+
+**In scope:** add a Scripts subtab in Website Settings with editable Header and Footer code areas; persist both strings through the existing authenticated settings endpoint and Turso key/value store; execute Header snippets inside `<head>` and Footer snippets at the end of the public `<body>` after site settings load; remove previously injected nodes when snippets change.
+
+**Security contract:** these are trusted-admin inputs and execute arbitrary supplied HTML/scripts for public visitors. The Admin UI warns that code runs on every public page. Do not treat these fields as sanitized or suitable for untrusted users.
+
+**Out of scope:** database schema changes, consent-management behavior, third-party vendor integrations/configuration, SSR changes, and production deployment.
+
+**Source acceptance:** Admin values load/save through existing settings storage; old settings default to empty strings; saving strips a BOM and outer whitespace, normalizes CRLF, and preserves internal code content; public app installs and cleans up Header/Footer snippets without duplicate nodes on reinstallation. Diagnostics and normalization/browser DOM smoke checks pass; third-party runtime execution remains pending a deployed smoke test.
+
+**Progress (2026-10-16):** source extends `SiteSettings`, Turso defaults/read/write keys, authenticated settings POST and public fallback; adds the Admin Scripts tab with Header/Footer textareas and trusted-code warning; and installs snippets into `document.head`/`document.body` after settings load. Snippet save normalizes BOM, outer whitespace and line endings while preserving internal formatting. A browser DOM smoke test confirmed inline header/footer execution, cleanup, and clean reinstallation; production third-party integrations remain unverified. No schema migration or production update was performed.
+
 ## Dependency Order and Current Gate
 
 `0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7`
 
-Current state: Phase 0 is complete; Phase 1 validation prerequisites are deferred/blocked; Phases 2–4, 6, and 8 are implemented in source with runtime verification pending; Phase 5 is deferred until post-push live testing; Phase 7 release approval is separate. Local lint/build remain blocked by missing Windows optional packages. See [implementation-status.md](implementation-status.md).
+Current state: Phase 0 is complete; Phase 1 validation prerequisites are deferred/blocked; Phases 2–4, 6, 8, and 9 are implemented in source with runtime verification pending; Phase 5 is deferred until post-push live testing; Phase 7 release approval is separate. Local lint/build remain blocked by missing Windows optional packages. See [implementation-status.md](implementation-status.md).

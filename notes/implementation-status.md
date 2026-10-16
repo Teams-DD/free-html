@@ -14,6 +14,8 @@
 - Modal URLs use `/{slug}?opened` and `/{slug}?closed`; direct opened routes resolve after metadata load; `popstate` synchronizes Back/Forward. `/vcon` remains Admin except the legacy public modal query route.
 - Per-template description is present in the shared model, Admin editor, API, Turso migration/read/write, and public metadata. Browser title/description update client-side; Open Graph image stays site-level.
 - SEO Phase 8 adds initial and route-aware metadata, a primary-host canonical, WebApplication/WebSite/Organization/FAQ JSON-LD, matching visible help/privacy/FAQ content, and robots/sitemap/manifest/favicon/social assets. Admin edits homepage, category, and template SEO fields; blank overrides generate bounded defaults. Category/template columns are migrated additively at schema initialization. A scoped Pages Function renders `/templates/:slug` metadata, H1/content/FAQ, and internal links into the raw response before the SPA runs; other routes remain SPA-rendered. Only `/` is in the static sitemap; live migration, deployed raw response, and social-card behavior are unverified.
+- Admin Website Settings now has a Scripts subtab for saved Header/Footer snippets. Values use the existing settings key/value API with no schema migration and are installed into public `<head>` and end of `<body>` after settings load. This executes trusted-admin code for public visitors; the UI warns about the behavior. Runtime third-party script execution remains unverified.
+- Save normalization removes a leading BOM and outer whitespace and converts CRLF/CR to LF; internal indentation and string whitespace remain unchanged. Focused normalization checks and browser DOM execution/cleanup/reinstall smoke checks pass. Live Turso persistence and third-party provider integrations are unverified.
 - Admin setup/login, template/category/settings management, Turso/R2 tools, sync-job management, and deployment instructions exist in source.
 - Public category URLs resolve active category slugs; existing category labels/filter behavior and layout remain. Daily aggregate activity source exists; runtime persistence is unverified.
 
@@ -55,6 +57,7 @@
 | 6. Category routing/aggregate activity | Implemented in source; runtime verification pending |
 | 7. Production release/verification | Proposed; not approved |
 | 8. SEO and crawlable public content | Implemented in source; runtime verification pending |
+| 9. Public Header/Footer script settings | Implemented in source; runtime verification pending |
 
 ## Current Workflow Gate
 

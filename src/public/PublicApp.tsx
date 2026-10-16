@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Category, PublicTemplateMetadata, SiteSettings } from '../types.ts';
 import { getCategorySeoMetadata, getHomeSeoMetadata, getTemplateSeoMetadata } from '../lib/seo.ts';
+import { installSiteScripts } from '../lib/siteScripts.ts';
 import { DevLogEntry, DevLogPanel } from './DevLogPanel.tsx';
 
 const rawTemplateUrl = (slug: string, hideScrollbars = false) =>
@@ -79,6 +80,8 @@ export const PublicApp: React.FC = () => {
     seo_title: '',
     seo_description: '',
     seo_keywords: '',
+    header_scripts: '',
+    footer_scripts: '',
     app_logo: '',
     favicon_url: '',
     og_image: '',
@@ -414,7 +417,11 @@ export const PublicApp: React.FC = () => {
         if (res.ok && data.success && data.settings) {
           devModeRef.current = Boolean(data.settings.dev_mode);
           if (!devModeRef.current) setDevLogs([]);
-          setSettings(data.settings);
+          setSettings({
+            ...data.settings,
+            header_scripts: typeof data.settings.header_scripts === 'string' ? data.settings.header_scripts : '',
+            footer_scripts: typeof data.settings.footer_scripts === 'string' ? data.settings.footer_scripts : '',
+          });
 
           if (data.settings.favicon_url) {
             let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']");
@@ -447,6 +454,8 @@ export const PublicApp: React.FC = () => {
     }
     loadSettings();
   }, [recordApiFailure, recordApiResponse]);
+
+  useEffect(() => installSiteScripts(settings.header_scripts, settings.footer_scripts), [settings.footer_scripts, settings.header_scripts]);
 
   const loadTemplates = useCallback(async () => {
     const startedAt = performance.now();
