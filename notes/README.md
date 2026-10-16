@@ -6,7 +6,7 @@
 - Branch: `main`.
 - Source baseline: `fecafe2` (`Paginate public template cards`).
 - Worktree was clean and synced with `origin/main` at baseline capture.
-- Baseline package version: `0.0.1`; current Phase 2 working-tree version: `0.0.3` in `package.json` and `package-lock.json`.
+- Baseline package version: `0.0.1`; Phase 1 used `0.0.2`, Phase 2 used `0.0.3`, card redesign used `0.0.4`, and current preview-loader version is `0.0.5` in both package files.
 - Audit and implementation claims distinguish source state from runtime/deployment verification.
 - Previous roadmap notes are superseded in this working tree; their prior versions remain in Git history.
 

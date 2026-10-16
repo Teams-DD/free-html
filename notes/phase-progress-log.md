@@ -3,12 +3,13 @@
 ## Current Status
 
 - Frozen baseline: `fecafe2` on `main`, synced with `origin/main` at capture on 2026-10-16.
-- Baseline package `0.0.1`; current Phase 2 working-tree package `0.0.3`.
+- Baseline package `0.0.1`; Phase 1 `0.0.2`; Phase 2 `0.0.3`; card redesign `0.0.4`; current loader update `0.0.5`.
 - Roadmap phases: 4 (0–3).
 - Complete: Phase 0 documentation, Phase 1 URL source, Phase 2 metadata source.
 - Remaining: Phase 3 staging/regression gate.
 - No production behavior is claimed as verified.
 - Next: unblock approved Phase 3 staging verification; no production deployment was attempted.
+- Additional public UI update: each card preview displays a compact loading indicator until its own iframe load event; this provides feedback without changing network/cache behavior.
 
 ## Phase 0 — Frozen Baseline and Audit
 

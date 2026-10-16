@@ -5,6 +5,7 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  LoaderCircle,
   Monitor,
   Tablet,
   Smartphone,
@@ -580,16 +581,32 @@ export const PublicApp: React.FC = () => {
                     title={item.title}
                     src={rawTemplateUrl(item.slug)}
                     loading="lazy"
+                    onLoad={(event) => {
+                      event.currentTarget.parentElement
+                        ?.querySelector('[data-preview-loader]')
+                        ?.setAttribute('hidden', '');
+                    }}
                     sandbox="allow-scripts"
                     className="absolute left-0 top-0 w-[400%] h-[400%] max-w-none border-0 pointer-events-none scale-[0.25] origin-top-left"
                   />
+                  <div
+                    data-preview-loader
+                    role="status"
+                    aria-live="polite"
+                    className="absolute inset-2 z-10 flex items-center justify-center bg-[#eef2f6]/90 text-zinc-500"
+                  >
+                    <span className="flex items-center gap-2 text-[11px] font-medium">
+                      <LoaderCircle className="h-4 w-4 animate-spin" />
+                      Loading preview...
+                    </span>
+                  </div>
                   <div className="absolute inset-0 bg-transparent" />
 
-                  <div className="badge absolute top-2.5 left-2.5 bg-black/60 backdrop-blur-md text-zinc-300 text-[10px] font-medium px-2 py-1 rounded-[4px] tracking-wide pointer-events-none">
+                  <div className="badge absolute top-2.5 left-2.5 z-20 bg-black/60 backdrop-blur-md text-zinc-300 text-[10px] font-medium px-2 py-1 rounded-[4px] tracking-wide pointer-events-none">
                       {item.category}
                   </div>
 
-                  <div className="badge absolute top-2.5 right-2.5 bg-black/60 backdrop-blur-md text-zinc-300 text-[10px] font-medium px-2 py-1 rounded-[4px] tracking-wide pointer-events-none">
+                  <div className="badge absolute top-2.5 right-2.5 z-20 bg-black/60 backdrop-blur-md text-zinc-300 text-[10px] font-medium px-2 py-1 rounded-[4px] tracking-wide pointer-events-none">
                       {(item.file_size / 1024).toFixed(1)} KB
                   </div>
                 </div>

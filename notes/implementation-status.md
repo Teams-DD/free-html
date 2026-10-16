@@ -4,14 +4,14 @@
 
 - Frozen source commit: `fecafe2` (`Paginate public template cards`), branch `main`.
 - Baseline worktree was clean and synced with `origin/main` on 2026-10-16.
-- Baseline version `0.0.1`; current Phase 2 working-tree version `0.0.3`.
+- Baseline version `0.0.1`; Phase 1 `0.0.2`, Phase 2 `0.0.3`, card redesign `0.0.4`, current preview-loader version `0.0.5`.
 - Source implementation is not equivalent to runtime/deployment verification.
 
 ## Existing Source Features
 
 - Public settings and full metadata list load from `/api/settings` and `/api/templates?metadata=1`.
 - Search, category/Popular filters, and 12/24/48 client-side card pagination are present; pagination limits rendered cards, not API/DB work.
-- Card/modal raw HTML preview, modal device/code modes, copy/download, and download counter are present.
+- Card previews use lazy raw HTML iframes with a compact per-frame loading indicator hidden on `onLoad`; modal device/code modes, copy/download, and download counter remain present.
 - Admin setup/auth, template/category/settings management, Turso/R2 management, and status UI exist.
 
 ## Phase 1 Source Implementation

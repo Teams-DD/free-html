@@ -3,7 +3,7 @@
 ## Frozen Baseline and Scope
 
 - Baseline: `fecafe2` on `main`, package `0.0.1`, frozen 2026-10-16.
-- Current working-tree package version after Phase 2: `0.0.3`.
+- Current working-tree package version after Phase 2 and public card design/loader updates: `0.0.5`.
 - Scope: public slug-based modal URLs, open/close history state, and browser title/description metadata.
 - Preserve card UI, catalog/search/category/Popular filters, pagination, card/modal previews, device modes, code/copy/download, existing counters, Admin auth/slug behavior, and R2 sync.
 - No persistent open/close analytics, SSR/crawler infrastructure, template image field, or unrelated routes/features.

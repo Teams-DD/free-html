@@ -2,42 +2,36 @@
 
 Last reviewed: 2026-10-16
 
-This is a source-grounded project map. Keep source implementation separate from runtime/deployment evidence. Detailed active scope and phase state live in `notes/`.
+Source facts and runtime/deployment evidence must remain distinct. Detailed project scope and current phase state live in `notes/`.
 
-## Tech Stack and Dependencies
+## Stack and Architecture
 
-- **Language/runtime:** TypeScript ES modules; Node.js local Express server; browser React app.
-- **Frontend:** React 19, Vite 8, Tailwind CSS 4, lucide-react, and motion.
-- **Server/API:** Express 4 and `tsx`; shared Web Request/Response handler in `src/lib/apiHandler.ts`.
-- **Database:** Turso/libSQL via `@libsql/client`, with in-memory mock/seed data if configured DB access fails or is absent.
-- **Object storage:** Cloudflare R2 via AWS S3 SDK and native Pages bucket bindings.
-- **Deployment:** Cloudflare Pages Functions/Wrangler; separate API cache Worker source in `src/apiCacheWorker.ts` and `wrangler.cache.toml`.
-- **Version:** frozen baseline `fecafe2` used `0.0.1`; current working tree advances package and lockfile to `0.0.4` through Phases 1–2 and the public card redesign. No tag/changelog convention is established.
-- **Scripts:** `npm run dev`/`npm start` run `server.ts`; `npm run build` uses Vite; `npm run lint` runs `tsc --noEmit`; no automated test script exists.
+- TypeScript ES modules; React 19, Vite 8, Tailwind CSS 4, lucide-react, motion.
+- Local server: Express 4 + `tsx`; Cloudflare Pages Functions and Wrangler for deployment.
+- Shared API entry point: `src/lib/apiHandler.ts`. Turso/libSQL schema and persistence: `src/lib/turso.ts`. R2 helpers: `src/lib/r2.ts`. Admin auth: `src/lib/auth.ts`.
+- `src/App.tsx` selects Admin for `/vcon`/`/vcon/*`, otherwise the public app. Phase 1 interprets `/vcon?opened` and `/vcon?closed` as public modal routes for a matching slug; bare `/vcon` remains Admin.
+- A separate cache Worker is represented by `src/apiCacheWorker.ts`/`wrangler.cache.toml`; its production route/deployment has not been verified.
+- Package version: frozen baseline `fecafe2` used `0.0.1`; current working-tree version is `0.0.5`, synchronized in package manifest and lockfile. No tag/changelog convention is established.
 
-## Architecture
+## Public Catalog
 
-- `src/App.tsx` selects Admin at `/vcon` or `/vcon/*`, otherwise PublicApp. Phase 1 treats `/vcon?opened` and `/vcon?closed` as public modal routes for a possible slug `vcon`; bare `/vcon` remains Admin.
-- `src/public/` contains the public catalog/modal and Dev Mode panel. `src/vcon/` contains Admin components/pages.
-- `src/lib/apiHandler.ts` is shared by Express and Pages Functions. `src/lib/turso.ts` owns schema/persistence; `src/lib/r2.ts` owns R2; `src/lib/auth.ts` owns Admin auth.
-- `server.ts` uses Vite SPA mode in development and an Express static catch-all in production. Cloudflare Pages direct slug refresh remains unverified; `public/_routes.json` covers API Function routing.
-- `notes/` is the active `fecafe2` source audit and Phase 0–3 modal URL/metadata roadmap. Require explicit approval before pending phase work.
+- Loads site settings and the complete template metadata list. Search/category/Popular filtering and client-side pagination (12 default; 12/24/48) are present. Pagination limits rendered cards/iframes, not API payload or DB reads.
+- Public cards follow `card_design_v4.html`: 4:3 preview, 6px radius, compact badges/body/stats/buttons, hover treatment. Card data/actions remain data-driven.
+- Card preview iframe uses `loading="lazy"` and a compact accessible `Loading preview...` indicator that is hidden on that iframe's load event. This is loading feedback only; it does not make requests faster.
+- View modal supports preview/code, desktop/tablet/mobile modes, copy, download, X/Escape close.
+- Phase 1 source adds `/{slug}?opened`/`?closed`, direct modal resolution, browser history synchronization, recoverable route errors, and encoded-slug decoding in raw/detail/download endpoints. URL state is not persistent analytics; the existing detail GET view increment is not called by modal open.
+- Phase 2 source adds optional template description through Admin single-template editor, shared type, save API, Turso migration, and public metadata. Modal title/OG title follow template title; description/OG description use the template description or site fallback; close restores site metadata. OG image remains site-level.
 
-## Current Features and Phase 1–2
+## Storage and Operations
 
-- Public catalog loads settings and complete template metadata; search/category/Popular and 12/24/48 client-side pagination are present. Pagination limits rendered cards, not API payload or DB reads. Public card styling follows `card_design_v4.html` with 4:3 previews, 6px card radius, compact badges/body/stats/buttons, and hover treatment; card data/actions stay data-driven.
-- Cards/modal use raw HTML preview. Modal supports device sizes, code, copy, download, Escape/X close.
-- Phase 1 adds `/{slug}?opened`/`?closed`, direct modal resolution after metadata load, History API synchronization, recoverable route errors, and encoded-slug decoding in raw/detail/download endpoints.
-- Phase 1 URL state is browser-only, not persistent analytics. Existing detail GET increments views asynchronously; modal route does not call it.
-- Phase 2 adds optional template description through Admin single-template editor, shared type, existing save API, additive Turso migration, and public metadata projection. Modal title/OG title use template title; description/OG description use template description or site description fallback; closing restores site-level values. OG image remains site-level.
-- Phase 2 migration adds `description TEXT NOT NULL DEFAULT ''` to existing tables after PRAGMA inspection and rechecks concurrent ALTER failure. Existing rows and omitted legacy payloads have empty/preserve fallbacks.
-- Phase 1–2 diagnostics are clean. Browser, Turso migration/save, Cloudflare direct paths, encoded-slash delivery, and production behavior remain unverified.
+- Turso is metadata/configuration/template-content storage; R2 stores objects/assets. Source has durable template sync jobs for real Turso. Mock memory mode cannot persist those jobs; deployed behavior is unverified.
+- `/api/status` source reuses a 30-second isolate-local result; production impact is unmeasured.
+- Root `wrangler.toml` is for Pages. `wrangler.cache.toml` currently has production-host routes; do not use it as staging.
+- Local `npm run dev` uses `server.ts`; dev Vite runs in SPA mode. Local production Express has a static catch-all. Cloudflare Pages direct slug-route behavior remains unverified.
 
-## Working Conventions
+## Verification and Workflow
 
-- Follow existing TypeScript/React/Tailwind patterns; preserve unrelated UI, Admin auth, DB/R2 sync, and public behaviors.
-- Keep API logic in the shared handler. Never store secrets, credentials, or full HTML in docs/logs.
-- `npm run lint` is the configured TypeScript check; `npm run build` is production build. Historical missing Windows TypeScript/Rolldown packages and `@xmldom/xmldom` failures must be rechecked, not assumed current.
-- Source checks do not establish deployed Pages/Cloudflare/Turso/R2 behavior. Record limitations explicitly.
-- Keep `MEMORY.md` and relevant `notes/` synchronized after code/config changes.
-- Phase 3 staging is approved but blocked: latest build check failed on the missing Windows Rolldown binding, Wrangler is unauthenticated, and no staging route is configured. The existing Worker routes target production; no deployment or production mutation was performed.
+- `npm run lint` is the TypeScript check, `npm run build` is the Vite build. No automated test script exists.
+- Phase 1–2 source diagnostics are clean. Browser preview-loader behavior, live Turso description migration/save, Cloudflare direct paths, and production metrics have not been verified.
+- A previous build attempt failed due to missing Windows Rolldown native binding; Wrangler was unauthenticated and no staging route existed at the last Phase 3 preflight. Recheck environment before rollout.
+- Preserve scope locks in `notes/implementation-roadmap.md`; require explicit approval for pending phases. After source/config changes, synchronize `MEMORY.md` and relevant notes. Never put secrets or full HTML in memory/docs/logs.
