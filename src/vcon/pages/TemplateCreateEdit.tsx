@@ -10,6 +10,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { HtmlTemplate, Category } from '../../types.ts';
+import { getTemplateSeoMetadata } from '../../lib/seo.ts';
 
 interface Props {
   initialTemplate?: HtmlTemplate | null;
@@ -58,6 +59,16 @@ const DEFAULT_HTML = `<!DOCTYPE html>
 </body>
 </html>`;
 
+const templateSeoDefaults = (title: string, category: string, tagsInput: string, description: string) => getTemplateSeoMetadata({
+  title: title.trim() || 'HTML Component',
+  category: category.trim() || 'HTML',
+  tags: tagsInput.split(',').map((tag) => tag.trim()).filter(Boolean),
+  description: description.trim(),
+  seo_title: '',
+  seo_description: '',
+  seo_keywords: '',
+});
+
 export const TemplateCreateEdit: React.FC<Props> = ({
   initialTemplate,
   categories = [],
@@ -73,9 +84,12 @@ export const TemplateCreateEdit: React.FC<Props> = ({
   const [category, setCategory] = useState(initialTemplate?.category || '');
   const [tagsInput, setTagsInput] = useState(initialTemplate?.tags.join(', ') || '');
   const [description, setDescription] = useState(initialTemplate?.description || '');
-  const [seoTitle, setSeoTitle] = useState(initialTemplate?.seo_title || '');
-  const [seoDescription, setSeoDescription] = useState(initialTemplate?.seo_description || '');
-  const [seoKeywords, setSeoKeywords] = useState(initialTemplate?.seo_keywords || '');
+  const [seoTitle, setSeoTitle] = useState(() => initialTemplate?.seo_title?.trim() || templateSeoDefaults(initialTemplate?.title || '', initialTemplate?.category || '', initialTemplate?.tags.join(', ') || '', initialTemplate?.description || '').title);
+  const [seoDescription, setSeoDescription] = useState(() => initialTemplate?.seo_description?.trim() || templateSeoDefaults(initialTemplate?.title || '', initialTemplate?.category || '', initialTemplate?.tags.join(', ') || '', initialTemplate?.description || '').description);
+  const [seoKeywords, setSeoKeywords] = useState(() => initialTemplate?.seo_keywords?.trim() || templateSeoDefaults(initialTemplate?.title || '', initialTemplate?.category || '', initialTemplate?.tags.join(', ') || '', initialTemplate?.description || '').keywords);
+  const [seoTitleEdited, setSeoTitleEdited] = useState(Boolean(initialTemplate?.seo_title?.trim()));
+  const [seoDescriptionEdited, setSeoDescriptionEdited] = useState(Boolean(initialTemplate?.seo_description?.trim()));
+  const [seoKeywordsEdited, setSeoKeywordsEdited] = useState(Boolean(initialTemplate?.seo_keywords?.trim()));
   const [htmlContent, setHtmlContent] = useState(initialTemplate?.html_content || DEFAULT_HTML);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,15 +112,71 @@ export const TemplateCreateEdit: React.FC<Props> = ({
   useEffect(() => {
     if (activeCategories.length === 0) return;
     const firstCategory = activeCategories[0].name;
-    if (!activeCategories.some((item) => item.name === category)) setCategory(firstCategory);
+    if (!activeCategories.some((item) => item.name === category)) {
+      setCategory(firstCategory);
+      const defaults = templateSeoDefaults(title, firstCategory, tagsInput, description);
+      if (!seoDescriptionEdited) setSeoDescription(defaults.description);
+      if (!seoKeywordsEdited) setSeoKeywords(defaults.keywords);
+    }
     if (!activeCategories.some((item) => item.name === bulkCategory)) setBulkCategory(firstCategory);
-  }, [activeCategories, bulkCategory, category]);
+  }, [activeCategories, bulkCategory, category, description, seoDescriptionEdited, seoKeywordsEdited, tagsInput, title]);
 
   const handleTitleChange = (val: string) => {
     setTitle(val);
+    const defaults = templateSeoDefaults(val, category, tagsInput, description);
+    if (!seoTitleEdited) setSeoTitle(defaults.title);
+    if (!seoDescriptionEdited) setSeoDescription(defaults.description);
+    if (!seoKeywordsEdited) setSeoKeywords(defaults.keywords);
     if (!initialTemplate) {
       setSlug(val.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''));
     }
+  };
+
+  const handleCategoryChange = (value: string) => {
+    setCategory(value);
+    const defaults = templateSeoDefaults(title, value, tagsInput, description);
+    if (!seoDescriptionEdited) setSeoDescription(defaults.description);
+    if (!seoKeywordsEdited) setSeoKeywords(defaults.keywords);
+  };
+
+  const handleTagsChange = (value: string) => {
+    setTagsInput(value);
+    if (!seoKeywordsEdited) setSeoKeywords(templateSeoDefaults(title, category, value, description).keywords);
+  };
+
+  const handleDescriptionChange = (value: string) => {
+    setDescription(value);
+    if (!seoDescriptionEdited) setSeoDescription(templateSeoDefaults(title, category, tagsInput, value).description);
+  };
+
+  const handleSeoTitleChange = (value: string) => {
+    if (!value.trim()) {
+      setSeoTitleEdited(false);
+      setSeoTitle(templateSeoDefaults(title, category, tagsInput, description).title);
+      return;
+    }
+    setSeoTitleEdited(true);
+    setSeoTitle(value);
+  };
+
+  const handleSeoDescriptionChange = (value: string) => {
+    if (!value.trim()) {
+      setSeoDescriptionEdited(false);
+      setSeoDescription(templateSeoDefaults(title, category, tagsInput, description).description);
+      return;
+    }
+    setSeoDescriptionEdited(true);
+    setSeoDescription(value);
+  };
+
+  const handleSeoKeywordsChange = (value: string) => {
+    if (!value.trim()) {
+      setSeoKeywordsEdited(false);
+      setSeoKeywords(templateSeoDefaults(title, category, tagsInput, description).keywords);
+      return;
+    }
+    setSeoKeywordsEdited(true);
+    setSeoKeywords(value);
   };
 
   const handleSingleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -121,8 +191,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
         if (!title) {
           const autoTitle = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]+/g, ' ');
           const capTitle = autoTitle.charAt(0).toUpperCase() + autoTitle.slice(1);
-          setTitle(capTitle);
-          setSlug(autoTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''));
+          handleTitleChange(capTitle);
         }
       }
     };
@@ -203,6 +272,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
         .split(',')
         .map((t) => t.trim())
         .filter(Boolean);
+      const generatedSeo = templateSeoDefaults(title, category, tagsInput, description);
 
       const res = await onSave({
         id: initialTemplate?.id,
@@ -211,9 +281,9 @@ export const TemplateCreateEdit: React.FC<Props> = ({
         category,
         tags,
         description: description.trim(),
-        seo_title: seoTitle.trim(),
-        seo_description: seoDescription.trim(),
-        seo_keywords: seoKeywords.trim(),
+        seo_title: seoTitle.trim() || generatedSeo.title,
+        seo_description: seoDescription.trim() || generatedSeo.description,
+        seo_keywords: seoKeywords.trim() || generatedSeo.keywords,
         html_content: htmlContent,
       });
 
@@ -457,7 +527,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
               </label>
               <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
+                onChange={(e) => handleCategoryChange(e.target.value)}
                 className="w-full px-2.5 py-1 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 focus:outline-none focus:border-[#383b47]"
               >
                 {categoryOptions.map((c) => (
@@ -476,7 +546,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
                 type="text"
                 placeholder="e.g. Button, Dark, Tailwind"
                 value={tagsInput}
-                onChange={(e) => setTagsInput(e.target.value)}
+                onChange={(e) => handleTagsChange(e.target.value)}
                 className="w-full px-2.5 py-1 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47]"
               />
             </div>
@@ -488,7 +558,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
               <textarea
                 rows={2}
                 value={description}
-                onChange={(event) => setDescription(event.target.value)}
+                onChange={(event) => handleDescriptionChange(event.target.value)}
                 placeholder="Short summary; used as the SEO description when no override is set"
                 className="w-full px-2.5 py-1.5 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47] resize-y"
               />
@@ -500,9 +570,10 @@ export const TemplateCreateEdit: React.FC<Props> = ({
                 <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">SEO Title</label>
                 <input
                   type="text"
+                  required
                   maxLength={70}
                   value={seoTitle}
-                  onChange={(event) => setSeoTitle(event.target.value)}
+                  onChange={(event) => handleSeoTitleChange(event.target.value)}
                   placeholder={title ? `${title} HTML Template | Vib Tools` : 'Generated from template title'}
                   className="w-full px-2.5 py-1 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47]"
                 />
@@ -510,10 +581,11 @@ export const TemplateCreateEdit: React.FC<Props> = ({
               <div>
                 <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">SEO Description</label>
                 <textarea
+                  required
                   rows={2}
-                  maxLength={160}
+                  maxLength={145}
                   value={seoDescription}
-                  onChange={(event) => setSeoDescription(event.target.value)}
+                  onChange={(event) => handleSeoDescriptionChange(event.target.value)}
                   placeholder="Generated from template title, category, and description"
                   className="w-full px-2.5 py-1.5 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47] resize-y"
                 />
@@ -522,14 +594,15 @@ export const TemplateCreateEdit: React.FC<Props> = ({
                 <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">SEO Keywords (comma-separated)</label>
                 <input
                   type="text"
+                  required
                   maxLength={255}
                   value={seoKeywords}
-                  onChange={(event) => setSeoKeywords(event.target.value)}
+                  onChange={(event) => handleSeoKeywordsChange(event.target.value)}
                   placeholder="Generated from title, category, and tags"
                   className="w-full px-2.5 py-1 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47]"
                 />
               </div>
-              <p className="text-[10px] text-zinc-500">Leave blank to generate compact metadata automatically.</p>
+              <p className="text-[10px] text-zinc-500">Generated metadata is prefilled. Clear a value to restore its generated default.</p>
             </div>
           </div>
 

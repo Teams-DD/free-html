@@ -12,8 +12,16 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { Category } from '../../types.ts';
+import { getCategorySeoMetadata } from '../../lib/seo.ts';
 import { AdminTablePagination } from '../components/AdminTablePagination.tsx';
 import { useAdminConfirmation } from '../components/AdminConfirmation.tsx';
+
+const categorySeoDefaults = (name: string) => getCategorySeoMetadata({
+  name: name.trim() || 'Category',
+  seo_title: '',
+  seo_description: '',
+  seo_keywords: '',
+});
 
 interface Props {
   categories: Category[];
@@ -45,9 +53,12 @@ export const CategoryManager: React.FC<Props> = ({
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [status, setStatus] = useState<'active' | 'inactive'>('active');
-  const [seoTitle, setSeoTitle] = useState('');
-  const [seoDescription, setSeoDescription] = useState('');
-  const [seoKeywords, setSeoKeywords] = useState('');
+  const [seoTitle, setSeoTitle] = useState(() => categorySeoDefaults('Category').title);
+  const [seoDescription, setSeoDescription] = useState(() => categorySeoDefaults('Category').description);
+  const [seoKeywords, setSeoKeywords] = useState(() => categorySeoDefaults('Category').keywords);
+  const [seoTitleEdited, setSeoTitleEdited] = useState(false);
+  const [seoDescriptionEdited, setSeoDescriptionEdited] = useState(false);
+  const [seoKeywordsEdited, setSeoKeywordsEdited] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,9 +67,13 @@ export const CategoryManager: React.FC<Props> = ({
     setName('');
     setSlug('');
     setStatus('active');
-    setSeoTitle('');
-    setSeoDescription('');
-    setSeoKeywords('');
+    const defaults = categorySeoDefaults('Category');
+    setSeoTitle(defaults.title);
+    setSeoDescription(defaults.description);
+    setSeoKeywords(defaults.keywords);
+    setSeoTitleEdited(false);
+    setSeoDescriptionEdited(false);
+    setSeoKeywordsEdited(false);
     setError(null);
     setModalOpen(true);
   };
@@ -68,18 +83,59 @@ export const CategoryManager: React.FC<Props> = ({
     setName(cat.name);
     setSlug(cat.slug);
     setStatus(cat.status);
-    setSeoTitle(cat.seo_title || '');
-    setSeoDescription(cat.seo_description || '');
-    setSeoKeywords(cat.seo_keywords || '');
+    const defaults = categorySeoDefaults(cat.name);
+    const savedSeoTitle = cat.seo_title?.trim() || '';
+    const savedSeoDescription = cat.seo_description?.trim() || '';
+    const savedSeoKeywords = cat.seo_keywords?.trim() || '';
+    setSeoTitle(savedSeoTitle || defaults.title);
+    setSeoDescription(savedSeoDescription || defaults.description);
+    setSeoKeywords(savedSeoKeywords || defaults.keywords);
+    setSeoTitleEdited(Boolean(savedSeoTitle));
+    setSeoDescriptionEdited(Boolean(savedSeoDescription));
+    setSeoKeywordsEdited(Boolean(savedSeoKeywords));
     setError(null);
     setModalOpen(true);
   };
 
   const handleNameChange = (val: string) => {
     setName(val);
+    const defaults = categorySeoDefaults(val);
+    if (!seoTitleEdited) setSeoTitle(defaults.title);
+    if (!seoDescriptionEdited) setSeoDescription(defaults.description);
+    if (!seoKeywordsEdited) setSeoKeywords(defaults.keywords);
     if (!editingCategory) {
       setSlug(val.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, ''));
     }
+  };
+
+  const handleSeoTitleChange = (value: string) => {
+    if (!value.trim()) {
+      setSeoTitleEdited(false);
+      setSeoTitle(categorySeoDefaults(name).title);
+      return;
+    }
+    setSeoTitleEdited(true);
+    setSeoTitle(value);
+  };
+
+  const handleSeoDescriptionChange = (value: string) => {
+    if (!value.trim()) {
+      setSeoDescriptionEdited(false);
+      setSeoDescription(categorySeoDefaults(name).description);
+      return;
+    }
+    setSeoDescriptionEdited(true);
+    setSeoDescription(value);
+  };
+
+  const handleSeoKeywordsChange = (value: string) => {
+    if (!value.trim()) {
+      setSeoKeywordsEdited(false);
+      setSeoKeywords(categorySeoDefaults(name).keywords);
+      return;
+    }
+    setSeoKeywordsEdited(true);
+    setSeoKeywords(value);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -94,9 +150,9 @@ export const CategoryManager: React.FC<Props> = ({
       name: name.trim(),
       slug: slug.trim() || name.trim().toLowerCase().replace(/[^a-z0-9]/g, '-'),
       status,
-      seo_title: seoTitle.trim(),
-      seo_description: seoDescription.trim(),
-      seo_keywords: seoKeywords.trim(),
+      seo_title: seoTitle.trim() || categorySeoDefaults(name).title,
+      seo_description: seoDescription.trim() || categorySeoDefaults(name).description,
+      seo_keywords: seoKeywords.trim() || categorySeoDefaults(name).keywords,
     });
 
     setSubmitting(false);
@@ -406,9 +462,10 @@ export const CategoryManager: React.FC<Props> = ({
                   <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">SEO Title</label>
                   <input
                     type="text"
+                    required
                     maxLength={70}
                     value={seoTitle}
-                    onChange={(event) => setSeoTitle(event.target.value)}
+                    onChange={(event) => handleSeoTitleChange(event.target.value)}
                     placeholder={name ? `${name} HTML Templates | Vib Tools` : 'Generated from category name'}
                     className="w-full px-2.5 py-1.5 bg-[#0c0d10] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47]"
                   />
@@ -416,10 +473,11 @@ export const CategoryManager: React.FC<Props> = ({
                 <div>
                   <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">SEO Description</label>
                   <textarea
+                    required
                     rows={2}
                     maxLength={160}
                     value={seoDescription}
-                    onChange={(event) => setSeoDescription(event.target.value)}
+                    onChange={(event) => handleSeoDescriptionChange(event.target.value)}
                     placeholder="Generated from the category name when blank"
                     className="w-full px-2.5 py-1.5 bg-[#0c0d10] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47] resize-y"
                   />
@@ -428,14 +486,15 @@ export const CategoryManager: React.FC<Props> = ({
                   <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">SEO Keywords (comma-separated)</label>
                   <input
                     type="text"
+                    required
                     maxLength={255}
                     value={seoKeywords}
-                    onChange={(event) => setSeoKeywords(event.target.value)}
+                    onChange={(event) => handleSeoKeywordsChange(event.target.value)}
                     placeholder="Generated from the category name"
                     className="w-full px-2.5 py-1.5 bg-[#0c0d10] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47]"
                   />
                 </div>
-                <p className="text-[10px] text-zinc-500">Leave blank to generate compact metadata automatically.</p>
+                <p className="text-[10px] text-zinc-500">Generated metadata is prefilled. Clear a value to restore its generated default.</p>
               </div>
 
               <div className="pt-2 flex items-center justify-end space-x-2">

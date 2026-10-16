@@ -15,7 +15,18 @@ import {
 } from 'lucide-react';
 import { AdminUser } from '../../types.ts';
 import { isValidAdminPassword } from '../../lib/authPolicy.ts';
+import { getHomeSeoMetadata } from '../../lib/seo.ts';
 import { useAdminConfirmation } from '../components/AdminConfirmation.tsx';
+
+const DEFAULT_SITE_NAME = 'Free HTML Templates';
+const DEFAULT_SITE_DESCRIPTION = 'Browse free HTML templates and responsive website components. Preview designs, inspect source code, and download HTML snippets to customize for your project.';
+const DEFAULT_HOME_SEO = getHomeSeoMetadata({
+  site_name: DEFAULT_SITE_NAME,
+  site_description: DEFAULT_SITE_DESCRIPTION,
+  seo_title: '',
+  seo_description: '',
+  seo_keywords: '',
+});
 
 interface Props {
   token: string | null;
@@ -27,11 +38,14 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
   const [activeSubTab, setActiveSubTab] = useState<'branding' | 'admins'>('branding');
 
   // Site Branding State
-  const [siteName, setSiteName] = useState('Free HTML Templates');
-  const [siteDescription, setSiteDescription] = useState('Browse free HTML templates and responsive website components. Preview designs, inspect source code, and download HTML snippets to customize for your project.');
-  const [seoTitle, setSeoTitle] = useState('');
-  const [seoDescription, setSeoDescription] = useState('');
-  const [seoKeywords, setSeoKeywords] = useState('');
+  const [siteName, setSiteName] = useState(DEFAULT_SITE_NAME);
+  const [siteDescription, setSiteDescription] = useState(DEFAULT_SITE_DESCRIPTION);
+  const [seoTitle, setSeoTitle] = useState(DEFAULT_HOME_SEO.title);
+  const [seoDescription, setSeoDescription] = useState(DEFAULT_HOME_SEO.description);
+  const [seoKeywords, setSeoKeywords] = useState(DEFAULT_HOME_SEO.keywords);
+  const [seoTitleEdited, setSeoTitleEdited] = useState(false);
+  const [seoDescriptionEdited, setSeoDescriptionEdited] = useState(false);
+  const [seoKeywordsEdited, setSeoKeywordsEdited] = useState(false);
   const [appLogo, setAppLogo] = useState('');
   const [faviconUrl, setFaviconUrl] = useState('');
   const [ogImage, setOgImage] = useState('');
@@ -74,11 +88,26 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
       });
       const data: any = await res.json();
       if (res.ok && data.success && data.settings) {
-        setSiteName(data.settings.site_name || 'Free HTML Templates');
-        setSiteDescription(data.settings.site_description || '');
-        setSeoTitle(data.settings.seo_title || '');
-        setSeoDescription(data.settings.seo_description || '');
-        setSeoKeywords(data.settings.seo_keywords || '');
+        const nextSiteName = data.settings.site_name || DEFAULT_SITE_NAME;
+        const nextSiteDescription = data.settings.site_description || DEFAULT_SITE_DESCRIPTION;
+        const defaults = getHomeSeoMetadata({
+          site_name: nextSiteName,
+          site_description: nextSiteDescription,
+          seo_title: '',
+          seo_description: '',
+          seo_keywords: '',
+        });
+        const savedSeoTitle = String(data.settings.seo_title || '').trim();
+        const savedSeoDescription = String(data.settings.seo_description || '').trim();
+        const savedSeoKeywords = String(data.settings.seo_keywords || '').trim();
+        setSiteName(nextSiteName);
+        setSiteDescription(nextSiteDescription);
+        setSeoTitle(savedSeoTitle || defaults.title);
+        setSeoDescription(savedSeoDescription || defaults.description);
+        setSeoKeywords(savedSeoKeywords || defaults.keywords);
+        setSeoTitleEdited(Boolean(savedSeoTitle));
+        setSeoDescriptionEdited(Boolean(savedSeoDescription));
+        setSeoKeywordsEdited(Boolean(savedSeoKeywords));
         setAppLogo(data.settings.app_logo || '');
         setFaviconUrl(data.settings.favicon_url || '');
         setOgImage(data.settings.og_image || '');
@@ -114,6 +143,49 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
     fetchAdminUsers();
   }, [token]);
 
+  useEffect(() => {
+    const defaults = getHomeSeoMetadata({
+      site_name: siteName,
+      site_description: siteDescription,
+      seo_title: '',
+      seo_description: '',
+      seo_keywords: '',
+    });
+    if (!seoTitleEdited) setSeoTitle(defaults.title);
+    if (!seoDescriptionEdited) setSeoDescription(defaults.description);
+    if (!seoKeywordsEdited) setSeoKeywords(defaults.keywords);
+  }, [seoDescriptionEdited, seoKeywordsEdited, seoTitleEdited, siteDescription, siteName]);
+
+  const handleSeoTitleChange = (value: string) => {
+    if (!value.trim()) {
+      setSeoTitleEdited(false);
+      setSeoTitle(getHomeSeoMetadata({ site_name: siteName, site_description: siteDescription, seo_title: '', seo_description: '', seo_keywords: '' }).title);
+      return;
+    }
+    setSeoTitleEdited(true);
+    setSeoTitle(value);
+  };
+
+  const handleSeoDescriptionChange = (value: string) => {
+    if (!value.trim()) {
+      setSeoDescriptionEdited(false);
+      setSeoDescription(getHomeSeoMetadata({ site_name: siteName, site_description: siteDescription, seo_title: '', seo_description: '', seo_keywords: '' }).description);
+      return;
+    }
+    setSeoDescriptionEdited(true);
+    setSeoDescription(value);
+  };
+
+  const handleSeoKeywordsChange = (value: string) => {
+    if (!value.trim()) {
+      setSeoKeywordsEdited(false);
+      setSeoKeywords(getHomeSeoMetadata({ site_name: siteName, site_description: siteDescription, seo_title: '', seo_description: '', seo_keywords: '' }).keywords);
+      return;
+    }
+    setSeoKeywordsEdited(true);
+    setSeoKeywords(value);
+  };
+
   // Handle Save Settings
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,9 +202,9 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
         body: JSON.stringify({
           site_name: siteName.trim(),
           site_description: siteDescription.trim(),
-          seo_title: seoTitle.trim(),
-          seo_description: seoDescription.trim(),
-          seo_keywords: seoKeywords.trim(),
+          seo_title: seoTitle.trim() || DEFAULT_HOME_SEO.title,
+          seo_description: seoDescription.trim() || DEFAULT_HOME_SEO.description,
+          seo_keywords: seoKeywords.trim() || DEFAULT_HOME_SEO.keywords,
           app_logo: appLogo.trim(),
           favicon_url: faviconUrl.trim(),
           og_image: ogImage.trim(),
@@ -429,9 +501,10 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
                   <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">SEO Title</label>
                   <input
                     type="text"
+                    required
                     maxLength={70}
                     value={seoTitle}
-                    onChange={(event) => setSeoTitle(event.target.value)}
+                    onChange={(event) => handleSeoTitleChange(event.target.value)}
                     placeholder="Generated from site name"
                     className="w-full px-2.5 py-1.5 bg-[#0c0d10] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47]"
                   />
@@ -439,8 +512,9 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
                 <div>
                   <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">SEO Description</label>
                   <textarea
+                    required
                     value={seoDescription}
-                    onChange={(event) => setSeoDescription(event.target.value)}
+                    onChange={(event) => handleSeoDescriptionChange(event.target.value)}
                     rows={2}
                     maxLength={160}
                     placeholder="Generated from site description"
@@ -451,14 +525,15 @@ export const SettingsManager: React.FC<Props> = ({ token }) => {
                   <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">SEO Keywords (comma-separated)</label>
                   <input
                     type="text"
+                    required
                     maxLength={255}
                     value={seoKeywords}
-                    onChange={(event) => setSeoKeywords(event.target.value)}
+                    onChange={(event) => handleSeoKeywordsChange(event.target.value)}
                     placeholder="Generated default keywords"
                     className="w-full px-2.5 py-1.5 bg-[#0c0d10] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47]"
                   />
                 </div>
-                <p className="text-[10px] text-zinc-500">Leave a field blank to use generated homepage metadata.</p>
+                <p className="text-[10px] text-zinc-500">Generated metadata is prefilled. Clear a value to restore its generated default.</p>
               </div>
 
               <label className="flex items-center justify-between gap-4 border-t border-[#1c1d22] pt-3">
