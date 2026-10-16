@@ -442,7 +442,28 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
     const template = await getTemplateBySlug(tursoClient, slug);
     if (!template) return new Response('Template not found', { status: 404 });
 
-    return new Response(template.html_content, {
+    let htmlContent = template.html_content;
+    if (url.searchParams.get('hide_scrollbars') === '1') {
+      const scrollbarStyle = '<style>html,body,*{scrollbar-width:none!important;-ms-overflow-style:none!important}html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}</style>';
+      const headTag = htmlContent.match(/<head\b[^>]*>/i);
+      const htmlTag = htmlContent.match(/<html\b[^>]*>/i);
+      const doctype = htmlContent.match(/^\s*<!doctype[^>]*>/i);
+
+      if (headTag?.index !== undefined) {
+        const insertAt = headTag.index + headTag[0].length;
+        htmlContent = `${htmlContent.slice(0, insertAt)}${scrollbarStyle}${htmlContent.slice(insertAt)}`;
+      } else if (htmlTag?.index !== undefined) {
+        const insertAt = htmlTag.index + htmlTag[0].length;
+        htmlContent = `${htmlContent.slice(0, insertAt)}<head>${scrollbarStyle}</head>${htmlContent.slice(insertAt)}`;
+      } else if (doctype?.index !== undefined) {
+        const insertAt = doctype.index + doctype[0].length;
+        htmlContent = `${htmlContent.slice(0, insertAt)}${scrollbarStyle}${htmlContent.slice(insertAt)}`;
+      } else {
+        htmlContent = `${scrollbarStyle}${htmlContent}`;
+      }
+    }
+
+    return new Response(htmlContent, {
       status: 200,
       headers: {
         'Content-Type': 'text/html; charset=utf-8',

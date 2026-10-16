@@ -71,10 +71,10 @@ Unless a phase explicitly lists a user-visible effect, preserve all existing rou
 
 1. Use an opt-in `?metadata=1` list response for the public app, with a Turso projection that excludes `html_content`; preserve the default full response for admin callers.
 2. Load card/modal previews from the existing read-only raw-template endpoint, with native lazy loading for card iframes; fetch code/download content only when requested and share in-flight/client-cached reads.
-3. Preserve metadata-based search/category filtering and the existing download counter POST. Do not add pagination or limits.
-4. Compare deployed payload sizes and verify initial/scroll previews, modal preview/code, filters, and downloads after rollout.
+3. Preserve metadata-based search/category filtering and the existing download counter POST. Paginate client-side with 12 cards by default and 12/24/48 options; slice only after filters and sorting so all templates remain reachable. This limits rendered cards/iframes but does not limit the metadata API response.
+4. Compare deployed payload sizes and verify page navigation, previews, modal preview/code, filters, and downloads after rollout.
 
-**Source completion gate:** the public metadata query omits HTML, the default/admin response remains unchanged, and the public UI obtains content only through the existing read-only endpoint. Production payload comparison and browser workflow regression remain deployment checks.
+**Source completion gate:** the public metadata query omits HTML, the default/admin response remains unchanged, the public UI obtains content only through the existing read-only endpoint, and client pagination preserves access to every filtered/sorted result. Production payload comparison and browser workflow regression remain deployment checks.
 
 ## Phase 5: Make Turso/R2 Synchronization Recoverable — Complete in Source; Failure-Injection Verification Pending
 

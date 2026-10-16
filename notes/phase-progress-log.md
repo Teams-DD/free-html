@@ -8,7 +8,7 @@
 - Production implementation phases completed in source: 6.
 - Remaining: 1 phase (Phase 7).
 - Next: unblock Phase 7 staging preflight; live deployment checks for Phases 1–6 remain pending.
-- Phase 5 changed template sync recovery; Phase 6 changed status/config-read work. No cache policy changed.
+- Phases 2–3 added source cache handling; Phase 5 changed template sync recovery; Phase 6 changed status/config-read work. Live rollout remains pending.
 
 ## Phase 0 — Baseline and Audit Documentation
 
@@ -89,11 +89,13 @@ Do not send API tokens, R2 secrets, or other credentials in chat. Dashboard valu
 - Scope lock: public catalog/content read path only; no auth, write behavior, R2 sync, admin UI, or unrelated routes changed.
 - Implemented: `/api/templates?metadata=1` uses a Turso column projection that excludes `html_content`; the default full response remains unchanged for admin callers.
 - Implemented: public cards use lazy iframes against the existing `/api/templates/:slug/raw` endpoint. Modal preview uses that same read-only endpoint; code view, copy, and download load content on demand with shared in-flight/client caching.
-- Preserved: metadata contains title/category/tags/slug/counts for the existing client-side filters; download counter POST and local count increment remain in place; no pagination or catalog limits added.
+- Implemented: client-side pagination renders 12 cards by default with 12/24/48 page-size choices; filters and Popular ordering run before page slicing; search/category/page-size changes reset to page 1.
+- Preserved: metadata contains title/category/tags/slug/counts for existing client-side filters; all items remain reachable across pages; download counter POST and local count increment remain in place. API still returns the complete metadata list, so this bounds rendered cards/iframes but does not reduce list payload or database reads.
 - Baseline: the Phase 1 sample measured `/api/templates` at 265,048 bytes with 258,572 aggregate HTML bytes across 9 templates. The post-change deployed response size has not been measured.
-- Verification: one `npm run lint` attempt was blocked before typechecking because `@typescript/typescript-win32-x64` is missing. No retry was made. Browser initial-load/scroll/modal/filter/download behavior and production payload reduction remain unverified until deployment.
+- Version: package and lockfile bumped from `0.0.0` to `0.0.1`; no existing release tags or changelog were found.
+- Verification: VS Code diagnostics report no errors in `PublicApp.tsx`, `package.json`, and `package-lock.json`. CLI typecheck/build and browser pagination/preview/filter/download checks remain unverified; prior local CLI checks were blocked by missing Windows TypeScript/Rolldown dependencies.
 - Phase status: source implementation complete; production verification pending.
-- Next phase: Phase 5 recovery design and approval.
+- Next phase: Phase 7 staging rollout remains blocked on build, Wrangler authentication, and a non-production route.
 
 ## Phase 5 — Make Turso/R2 Synchronization Recoverable
 

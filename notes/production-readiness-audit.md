@@ -146,6 +146,9 @@ The safest first performance improvement is to measure and cache public read res
 - Card previews use native lazy iframes against the existing sanitized, read-only `/api/templates/:slug/raw` route. Modal preview uses the same route; code/copy/download retrieve HTML only when needed and share in-flight/client-cached reads.
 - Existing client-side category/search filtering, download counter POST, and local count update remain unchanged. No auth, mutation, R2 sync, schema, or unrelated route behavior changed.
 - One source typecheck attempt was blocked before TypeScript ran because `@typescript/typescript-win32-x64` is missing. The deployed metadata response size and browser initial/scroll/modal/filter/download behavior have not yet been measured; Phase 1's 265,048-byte full-list sample remains the before baseline.
+- Client-side pagination now renders 12 cards by default with 12/24/48 options. Search/category/Popular filtering and Popular download sorting precede slicing; filters and page-size changes reset to page 1. Every matching template remains reachable.
+- Pagination limits card/iframe DOM only. `/api/templates?metadata=1` and the Turso projection still return all metadata with no `LIMIT`/`OFFSET`; payload size and DB reads are not reduced by this change.
+- Package version and lockfile root version are synchronized at `0.0.1`. Editor diagnostics are clean; CLI/browser/deployed verification remains pending.
 
 ## Phase 5 Implementation Record (2026-10-16)
 

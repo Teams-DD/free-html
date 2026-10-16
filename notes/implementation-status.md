@@ -6,7 +6,7 @@
 - Items below are marked **source-implemented** when the code path exists. This is not the same as production verification.
 - Production cache configuration and live DB/R2 behavior have not been verified from this workspace.
 - Phase 0 documentation and Phase 1–6 source implementation are complete; Phase 7 is not implemented.
-- Phase 1–3 changes are uncommitted. Worker routes must be deployed/attached before cache behavior is live.
+- Phase 1–6 source implementations are committed; deployment/runtime checks remain outstanding. Worker routes must be deployed/attached before cache behavior is live.
 
 ## Pre-Phase-1 Source-Implemented Features at Baseline
 
@@ -46,7 +46,7 @@
 | 1. Measure and targets | Complete in source; Dev Mode evidence tool implemented | Live sample/target recorded; production activation unverified |
 | 2. Public read caching | Worker gateway/config implemented; only two public list/settings GETs cached | Dry-run passed; Worker route and live HIT/purge unverified |
 | 3. Cache freshness/invalidation | Revisioned R2 URLs, raw API no-store, per-object app-host fallback invalidation implemented | Dry-run passed; external old browser cache and live route behavior unverified |
-| 4. Payload/read optimization | Public app uses metadata-only list; previews/content load from the existing raw endpoint | Typecheck blocked by missing Windows TypeScript package; deployed payload/browser regression pending |
+| 4. Payload/read optimization | Public app uses metadata-only list and client pagination (12 default; 12/24/48); previews/content load from existing raw endpoint | Editor diagnostics clean; CLI typecheck/build and deployed browser/payload checks remain pending |
 | 5. Turso/R2 recovery | Atomic Turso sync jobs, idempotent R2 operations, bounded retries, and authenticated retry endpoint | Source diagnostics clean; deployed failure-injection pending |
 | 6. Admin status/config work | 30-second status probe reuse, explicit forced refresh, admin request deduplication, and route-scoped R2 config reads | Source diagnostics clean; deployed call-volume impact pending |
 | 7. Production rollout | Approved; blocked before staging | Build blocked by missing Rolldown native binding; Wrangler unauthenticated; no staging Worker route configured |

@@ -3,6 +3,8 @@ import {
   Download,
   Eye,
   Search,
+  ChevronLeft,
+  ChevronRight,
   Monitor,
   Tablet,
   Smartphone,
@@ -14,10 +16,14 @@ import {
 import { PublicTemplateMetadata, SiteSettings } from '../types.ts';
 import { DevLogEntry, DevLogPanel } from './DevLogPanel.tsx';
 
-const rawTemplateUrl = (slug: string) => `/api/templates/${encodeURIComponent(slug)}/raw`;
+const rawTemplateUrl = (slug: string, hideScrollbars = false) =>
+  `/api/templates/${encodeURIComponent(slug)}/raw${hideScrollbars ? '?hide_scrollbars=1' : ''}`;
+const TEMPLATE_PAGE_SIZES = [12, 24, 48];
 
 export const PublicApp: React.FC = () => {
   const [snippets, setSnippets] = useState<PublicTemplateMetadata[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<SiteSettings>({
     site_name: 'HTML Snippets & Templates',
@@ -273,21 +279,33 @@ export const PublicApp: React.FC = () => {
   // Categories list derived from real templates
   const categories = useMemo(() => {
     const list = new Set(snippets.map((s) => s.category).filter(Boolean));
-    return ['all', ...Array.from(list)];
+    return ['all', '__popular__', ...Array.from(list)];
   }, [snippets]);
 
   // Filtered snippets
   const filteredSnippets = useMemo(() => {
-    return snippets.filter((item) => {
-      const matchesCat = selectedCategory === 'all' || item.category === selectedCategory;
+    const matches = snippets.filter((item) => {
+      const isPopular = selectedCategory === '__popular__';
+      const matchesCat = selectedCategory === 'all' || isPopular || item.category === selectedCategory;
+      const matchesPopularity = !isPopular || item.downloads > 0;
       const matchesSearch =
         !search ||
         item.title.toLowerCase().includes(search.toLowerCase()) ||
         item.slug.toLowerCase().includes(search.toLowerCase()) ||
         item.tags.some((t) => t.toLowerCase().includes(search.toLowerCase()));
-      return matchesCat && matchesSearch;
+      return matchesCat && matchesPopularity && matchesSearch;
     });
+
+    return selectedCategory === '__popular__'
+      ? matches.sort((a, b) => b.downloads - a.downloads)
+      : matches;
   }, [snippets, selectedCategory, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredSnippets.length / pageSize));
+  const pageStartIndex = (currentPage - 1) * pageSize;
+  const pageSnippets = filteredSnippets.slice(pageStartIndex, pageStartIndex + pageSize);
+  const rangeStart = filteredSnippets.length === 0 ? 0 : pageStartIndex + 1;
+  const rangeEnd = Math.min(pageStartIndex + pageSize, filteredSnippets.length);
 
   const handleDownload = async (item: PublicTemplateMetadata) => {
     try {
@@ -359,14 +377,17 @@ export const PublicApp: React.FC = () => {
             {categories.map((cat) => (
               <button
                 key={cat}
-                onClick={() => setSelectedCategory(cat)}
+                onClick={() => {
+                  setSelectedCategory(cat);
+                  setCurrentPage(1);
+                }}
                 className={`px-2.5 py-1 rounded text-[11px] font-medium transition cursor-pointer shadow-none border-0 ${
                   selectedCategory === cat
                     ? 'bg-zinc-800 text-zinc-100'
                     : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850/60'
                 }`}
               >
-                {cat === 'all' ? 'All' : cat}
+                {cat === 'all' ? 'All' : cat === '__popular__' ? 'Popular' : cat}
               </button>
             ))}
           </div>
@@ -380,7 +401,10 @@ export const PublicApp: React.FC = () => {
               type="text"
               placeholder="Search..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setCurrentPage(1);
+              }}
               className="pl-8 pr-3 py-1 bg-[#131418] border border-zinc-800 rounded text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700 w-32 sm:w-48 transition shadow-none"
             />
           </div>
@@ -411,7 +435,7 @@ export const PublicApp: React.FC = () => {
             className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
             id="card-grid"
           >
-            {filteredSnippets.map((item) => (
+            {pageSnippets.map((item) => (
               <div
                 key={item.id}
                 className="bg-[#121317] border border-zinc-800 hover:border-zinc-750 rounded-md transition-colors duration-150 flex flex-col overflow-hidden group h-full shadow-none"
@@ -496,6 +520,49 @@ export const PublicApp: React.FC = () => {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {filteredSnippets.length > 0 && (
+          <div className="mt-5 flex flex-col gap-3 text-[11px] text-zinc-400 sm:flex-row sm:items-center sm:justify-between">
+            <span>Showing {rangeStart}-{rangeEnd} of {filteredSnippets.length}</span>
+            <div className="flex items-center justify-between gap-2 sm:justify-end">
+              <label htmlFor="template-page-size">Per page</label>
+              <select
+                id="template-page-size"
+                value={pageSize}
+                onChange={(event) => {
+                  setPageSize(Number(event.target.value));
+                  setCurrentPage(1);
+                }}
+                className="h-7 rounded border border-zinc-800 bg-[#131418] px-2 text-[11px] text-zinc-300"
+              >
+                {TEMPLATE_PAGE_SIZES.map((size) => (
+                  <option key={size} value={size}>{size}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
+                disabled={currentPage === 1}
+                aria-label="Previous page"
+                title="Previous page"
+                className="flex h-7 w-7 items-center justify-center rounded border border-zinc-800 text-zinc-300 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
+              <span className="min-w-16 text-center">Page {currentPage} of {totalPages}</span>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.min(page + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                aria-label="Next page"
+                title="Next page"
+                className="flex h-7 w-7 items-center justify-center rounded border border-zinc-800 text-zinc-300 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
         )}
 
@@ -638,7 +705,7 @@ export const PublicApp: React.FC = () => {
                 >
                   <iframe
                     title="Modal Preview"
-                    src={rawTemplateUrl(activeModal.slug)}
+                    src={rawTemplateUrl(activeModal.slug, true)}
                     sandbox="allow-scripts allow-modals"
                     className="w-full h-full border-0 shadow-none"
                   />
