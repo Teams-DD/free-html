@@ -281,6 +281,7 @@ const VconAppContent: React.FC = () => {
     slug: string;
     category: string;
     tags: string[];
+    description: string;
     html_content: string;
   }) => {
     const res = await fetch('/api/vcon/templates', {

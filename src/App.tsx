@@ -4,18 +4,22 @@ import { PublicApp } from './public/PublicApp.tsx';
 const VconApp = lazy(() => import('./vcon/VconApp.tsx').then((m) => ({ default: m.VconApp })));
 
 export default function App() {
-  const [currentPath, setCurrentPath] = useState(() => window.location.pathname);
+  const [currentLocation, setCurrentLocation] = useState(() => `${window.location.pathname}${window.location.search}`);
 
   useEffect(() => {
     const handleLocationChange = () => {
-      setCurrentPath(window.location.pathname);
+      setCurrentLocation(`${window.location.pathname}${window.location.search}`);
     };
 
     window.addEventListener('popstate', handleLocationChange);
     return () => window.removeEventListener('popstate', handleLocationChange);
   }, []);
 
-  const isAdmin = currentPath === '/vcon' || currentPath.startsWith('/vcon/');
+  const locationUrl = new URL(currentLocation, window.location.origin);
+  const isPublicModalRoute = locationUrl.pathname === '/vcon' &&
+    (locationUrl.searchParams.has('opened') || locationUrl.searchParams.has('closed'));
+  const isAdmin = !isPublicModalRoute &&
+    (locationUrl.pathname === '/vcon' || locationUrl.pathname.startsWith('/vcon/'));
 
   if (isAdmin) {
     return (

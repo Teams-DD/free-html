@@ -1,59 +1,44 @@
 # Implementation Status
 
-## Status Rules
+## Baseline
 
-- Baseline: `417dc16202a69806bf62bb55819ed3d16c2326b7` on `main`.
-- Items below are marked **source-implemented** when the code path exists. This is not the same as production verification.
-- Production cache configuration and live DB/R2 behavior have not been verified from this workspace.
-- Phase 0 documentation and Phase 1–6 source implementation are complete; Phase 7 is not implemented.
-- Phase 1–6 source implementations are committed; deployment/runtime checks remain outstanding. Worker routes must be deployed/attached before cache behavior is live.
+- Frozen source commit: `fecafe2` (`Paginate public template cards`), branch `main`.
+- Baseline worktree was clean and synced with `origin/main` on 2026-10-16.
+- Baseline version `0.0.1`; current Phase 2 working-tree version `0.0.3`.
+- Source implementation is not equivalent to runtime/deployment verification.
 
-## Pre-Phase-1 Source-Implemented Features at Baseline
+## Existing Source Features
 
-### Public application
+- Public settings and full metadata list load from `/api/settings` and `/api/templates?metadata=1`.
+- Search, category/Popular filters, and 12/24/48 client-side card pagination are present; pagination limits rendered cards, not API/DB work.
+- Card/modal raw HTML preview, modal device/code modes, copy/download, and download counter are present.
+- Admin setup/auth, template/category/settings management, Turso/R2 management, and status UI exist.
 
-- Loads site settings and template data from `/api/settings` and `/api/templates`: [PublicApp.tsx](../src/public/PublicApp.tsx#L67) [PublicApp.tsx](../src/public/PublicApp.tsx#L117).
-- Renders category/search filters and HTML cards from the fetched list; the card iframe uses `srcDoc`: [PublicApp.tsx](../src/public/PublicApp.tsx#L280).
-- Has preview/code modes, desktop/tablet/mobile preview sizing, code copy, HTML download, and download-count request: [PublicApp.tsx](../src/public/PublicApp.tsx#L156) [PublicApp.tsx](../src/public/PublicApp.tsx#L376).
+## Phase 1 Source Implementation
 
-## Phase 1 Working-Tree Implementation (Uncommitted)
+- Public modal URLs use `/{slug}?opened` and `/{slug}?closed`; direct open and browser Back/Forward synchronize with modal state.
+- Encoded slugs are decoded by existing raw/detail/download routes; invalid/non-representable routes show a recovery state.
+- URL state is client-side only; no analytics writes or view-counter change.
 
-- Adds an opt-in `dev_mode` setting and local-only public Dev Log for app API response metadata and top-level browser errors; response bodies and credentials are not captured: [PublicApp.tsx](../src/public/PublicApp.tsx) [DevLogPanel.tsx](../src/public/DevLogPanel.tsx).
-- Adds request-level `Server-Timing` spans to `/api/settings` and `/api/templates`: [apiHandler.ts](../src/lib/apiHandler.ts).
+## Phase 2 Source Implementation
 
-### Admin application
+- Optional per-template `description` is present in the shared model, Admin single-template editor, template save API and Turso persistence, and public metadata projection.
+- Existing DB schema migration adds a non-null empty-default column; older template rows retain an empty fallback. Save calls omitting description preserve an existing value.
+- Active modal sets browser title/OG title to template title and description/OG description to template description or site-level fallback. Closing restores site metadata. OG image remains site-level.
+- Version manifest and lockfile are synchronized at `0.0.3`.
 
-- Admin route is lazy-loaded from the public app entry: [App.tsx](../src/App.tsx#L4).
-- Template editor supports single and bulk file upload paths: [TemplateCreateEdit.tsx](../src/vcon/pages/TemplateCreateEdit.tsx#L114) [TemplateCreateEdit.tsx](../src/vcon/pages/TemplateCreateEdit.tsx#L124).
-- Template/category tables contain row selection, bulk actions, and 20-row pagination: [TemplateManager.tsx](../src/vcon/pages/TemplateManager.tsx) [CategoryManager.tsx](../src/vcon/pages/CategoryManager.tsx) [AdminTablePagination.tsx](../src/vcon/components/AdminTablePagination.tsx).
-- Shared admin confirmation modal is mounted at the admin root and used by admin confirmations: [AdminConfirmation.tsx](../src/vcon/components/AdminConfirmation.tsx) [VconApp.tsx](../src/vcon/VconApp.tsx).
-- Settings, Turso, R2, and Deployment pages have widened centered content containers in source: [SettingsManager.tsx](../src/vcon/pages/SettingsManager.tsx) [TursoManager.tsx](../src/vcon/pages/TursoManager.tsx) [R2Manager.tsx](../src/vcon/pages/R2Manager.tsx) [DeploymentDocs.tsx](../src/vcon/pages/DeploymentDocs.tsx).
-- Admin handlers exist for templates, categories, settings, database initialization/seeding, R2 configuration/files, and admin-user management: [VconApp.tsx](../src/vcon/VconApp.tsx#L185) [apiHandler.ts](../src/lib/apiHandler.ts#L453).
+## Current Roadmap Status
 
-### Cloudflare and storage integration
-
-- Pages Function routes `/api/*` to `handleApiRequest`: [functions/api/[[route]].ts](../functions/api/[[route]].ts).
-- `_routes.json` includes `/api/*`; `/assets/*` are excluded from Functions: [public/_routes.json](../public/_routes.json).
-- R2 supports S3 client and Native R2 binding helpers: [r2.ts](../src/lib/r2.ts#L145) [r2.ts](../src/lib/r2.ts#L298).
-- Public `/api/settings` and `/api/templates` responses include request-level `Server-Timing` spans for handler/Turso timings and direct R2 object operations; this is not Cloudflare account analytics: [apiHandler.ts](../src/lib/apiHandler.ts).
-- Static build assets have `public, max-age=31536000, immutable`; public JSON responses have no source-defined cache policy: [public/_headers](../public/_headers#L1) [apiHandler.ts](../src/lib/apiHandler.ts#L28).
-
-## Roadmap Feature Status
-
-| Roadmap phase | Source implementation status | Runtime/production status |
-|---|---|---|
-| 0. Baseline and docs | Complete; notes only | Baseline SHA recorded |
-| 1. Measure and targets | Complete in source; Dev Mode evidence tool implemented | Live sample/target recorded; production activation unverified |
-| 2. Public read caching | Worker gateway/config implemented; only two public list/settings GETs cached | Dry-run passed; Worker route and live HIT/purge unverified |
-| 3. Cache freshness/invalidation | Revisioned R2 URLs, raw API no-store, per-object app-host fallback invalidation implemented | Dry-run passed; external old browser cache and live route behavior unverified |
-| 4. Payload/read optimization | Public app uses metadata-only list and client pagination (12 default; 12/24/48); previews/content load from existing raw endpoint | Editor diagnostics clean; CLI typecheck/build and deployed browser/payload checks remain pending |
-| 5. Turso/R2 recovery | Atomic Turso sync jobs, idempotent R2 operations, bounded retries, and authenticated retry endpoint | Source diagnostics clean; deployed failure-injection pending |
-| 6. Admin status/config work | 30-second status probe reuse, explicit forced refresh, admin request deduplication, and route-scoped R2 config reads | Source diagnostics clean; deployed call-volume impact pending |
-| 7. Production rollout | Approved; blocked before staging | Build blocked by missing Rolldown native binding; Wrangler unauthenticated; no staging Worker route configured |
+| Phase | Status |
+|---|---|
+| 0. Baseline/source audit | Complete; docs only |
+| 1. Slug modal URL state | Complete in source; browser/deployment verification pending |
+| 2. Per-template metadata | Complete in source; migration/browser verification pending |
+| 3. Staging/regression | Approved; blocked before staging (build binding, Wrangler auth, and staging target unavailable) |
 
 ## Verification Limits
 
-- Prior source diagnostics reported no errors for the inspected UI changes, but they do not verify Cloudflare, Turso, or R2 production behavior.
-- A prior production build attempt failed because the Windows Rolldown native binding was missing.
-- A prior local dev-server attempt failed because `@xmldom/xmldom` could not be resolved.
-- Re-run build, tests, and browser regression checks after fixing the local dependency environment; do not treat the application as production-verified until then.
+- VS Code diagnostics found no errors in the touched source and manifests.
+- Browser testing, live Turso migration/save, deployed route behavior, encoded-slash delivery, and crawler metadata were not verified.
+- Phase 3 preflight: build failed because the Windows Rolldown native binding is missing; Wrangler is unauthenticated and no non-production route is configured. No deployment or production mutation was performed.
+- No automated test script exists; historical TypeScript/Rolldown dependency failures should be rechecked before rollout.

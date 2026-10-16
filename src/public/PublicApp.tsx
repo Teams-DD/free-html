@@ -18,6 +18,12 @@ import { DevLogEntry, DevLogPanel } from './DevLogPanel.tsx';
 
 const rawTemplateUrl = (slug: string, hideScrollbars = false) =>
   `/api/templates/${encodeURIComponent(slug)}/raw${hideScrollbars ? '?hide_scrollbars=1' : ''}`;
+const templateModalUrl = (slug: string, state: 'opened' | 'closed'): string | null => {
+  const pathname = `/${encodeURIComponent(slug)}`;
+  const normalizedPathname = new URL(pathname, window.location.origin).pathname;
+  if (normalizedPathname !== pathname || normalizedPathname.split('/').filter(Boolean).length !== 1) return null;
+  return `${pathname}?${state}`;
+};
 const TEMPLATE_PAGE_SIZES = [12, 24, 48];
 
 export const PublicApp: React.FC = () => {
@@ -77,6 +83,7 @@ export const PublicApp: React.FC = () => {
 
   // Modal preview state
   const [activeModal, setActiveModal] = useState<PublicTemplateMetadata | null>(null);
+  const [modalRouteError, setModalRouteError] = useState(false);
   const [viewMode, setViewMode] = useState<'preview' | 'code'>('preview');
   const [modalHtml, setModalHtml] = useState<string | null>(null);
   const [modalHtmlError, setModalHtmlError] = useState(false);
@@ -85,6 +92,103 @@ export const PublicApp: React.FC = () => {
   const [previewScale, setPreviewScale] = useState(0.5);
   const templateHtmlCache = useRef(new Map<string, string>());
   const templateHtmlRequests = useRef(new Map<string, Promise<string>>());
+  const snippetsRef = useRef(snippets);
+  const loadingRef = useRef(loading);
+  const activeModalRef = useRef(activeModal);
+  snippetsRef.current = snippets;
+  loadingRef.current = loading;
+  activeModalRef.current = activeModal;
+
+  const syncModalFromLocation = useCallback(() => {
+    const url = new URL(window.location.href);
+    const isOpened = url.searchParams.has('opened');
+    const isClosed = url.searchParams.has('closed');
+
+    if (isOpened && isClosed) {
+      setActiveModal(null);
+      setModalRouteError(true);
+      return;
+    }
+
+    if (!isOpened) {
+      setActiveModal(null);
+      setModalRouteError(false);
+      return;
+    }
+
+    const pathSegments = url.pathname.split('/').filter(Boolean);
+    if (pathSegments.length !== 1) {
+      setActiveModal(null);
+      setModalRouteError(true);
+      return;
+    }
+
+    let slug: string;
+    try {
+      slug = decodeURIComponent(pathSegments[0]);
+    } catch {
+      setActiveModal(null);
+      setModalRouteError(true);
+      return;
+    }
+
+    const template = snippetsRef.current.find((item) => item.slug === slug);
+    if (template) {
+      setModalRouteError(false);
+      if (activeModalRef.current?.slug !== template.slug) {
+        setActiveModal(template);
+        setViewMode('preview');
+        setModalHtml(null);
+        setModalHtmlError(false);
+        setDeviceSize('desktop');
+      }
+    } else if (!loadingRef.current) {
+      setActiveModal(null);
+      setModalRouteError(true);
+    }
+  }, []);
+
+  const openTemplateModal = (item: PublicTemplateMetadata) => {
+    const modalUrl = templateModalUrl(item.slug, 'opened');
+    if (!modalUrl) {
+      setActiveModal(null);
+      setModalRouteError(true);
+      return;
+    }
+    window.history.pushState({ templateSlug: item.slug, modalState: 'opened' }, '', modalUrl);
+    setActiveModal(item);
+    setModalRouteError(false);
+    setViewMode('preview');
+    setModalHtml(null);
+    setModalHtmlError(false);
+    setDeviceSize('desktop');
+  };
+
+  const closeTemplateModal = useCallback(() => {
+    if (activeModal) {
+      const modalUrl = templateModalUrl(activeModal.slug, 'closed');
+      if (modalUrl) {
+        window.history.replaceState(
+          { templateSlug: activeModal.slug, modalState: 'closed' },
+          '',
+          modalUrl
+        );
+      }
+    }
+    setActiveModal(null);
+    setModalRouteError(false);
+  }, [activeModal]);
+
+  useEffect(() => {
+    const handlePopState = () => syncModalFromLocation();
+    window.addEventListener('popstate', handlePopState);
+    syncModalFromLocation();
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [syncModalFromLocation]);
+
+  useEffect(() => {
+    if (!loading) syncModalFromLocation();
+  }, [loading, snippets, syncModalFromLocation]);
 
   const getTemplateHtml = useCallback(async (slug: string): Promise<string> => {
     const cachedHtml = templateHtmlCache.current.get(slug);
@@ -244,6 +348,21 @@ export const PublicApp: React.FC = () => {
   }, [loadTemplates]);
 
   useEffect(() => {
+    const title = activeModal?.title || settings.site_name || 'HTML Snippets & Templates';
+    const description = activeModal?.description?.trim() || settings.site_description;
+    document.title = title;
+
+    const ogTitle = document.querySelector('meta[property="og:title"]');
+    if (ogTitle) ogTitle.setAttribute('content', title);
+
+    const metaDescription = document.querySelector('meta[name="description"]');
+    if (metaDescription) metaDescription.setAttribute('content', description);
+
+    const ogDescription = document.querySelector('meta[property="og:description"]');
+    if (ogDescription) ogDescription.setAttribute('content', description);
+  }, [activeModal?.description, activeModal?.title, settings.site_description, settings.site_name]);
+
+  useEffect(() => {
     if (!settings.dev_mode) return;
 
     const handleError = (event: ErrorEvent) => {
@@ -309,7 +428,7 @@ export const PublicApp: React.FC = () => {
 
   const handleDownload = async (item: PublicTemplateMetadata) => {
     try {
-      const endpoint = `/api/templates/${item.slug}/download`;
+      const endpoint = `/api/templates/${encodeURIComponent(item.slug)}/download`;
       const startedAt = performance.now();
       fetch(endpoint, { method: 'POST' })
         .then((response) => recordApiResponse('POST', endpoint, response, startedAt))
@@ -345,11 +464,11 @@ export const PublicApp: React.FC = () => {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setActiveModal(null);
+      if (e.key === 'Escape') closeTemplateModal();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [closeTemplateModal]);
 
   return (
     <div className="public-app min-h-screen bg-[#090a0c] text-zinc-300 flex flex-col font-sans selection:bg-zinc-800 selection:text-zinc-200 antialiased">
@@ -422,6 +541,21 @@ export const PublicApp: React.FC = () => {
           <div className="h-64 flex flex-col items-center justify-center text-xs text-zinc-500 font-mono">
             Loading snippets...
           </div>
+        ) : modalRouteError ? (
+          <div className="h-64 flex flex-col items-center justify-center gap-3 text-center p-6 bg-[#121317] border border-zinc-800 rounded-md shadow-none">
+            <p className="text-xs text-zinc-400 font-medium">This template link is invalid or unavailable.</p>
+            <button
+              type="button"
+              onClick={() => {
+                window.history.pushState({}, '', '/');
+                setModalRouteError(false);
+                setCurrentPage(1);
+              }}
+              className="px-2.5 py-1 bg-zinc-800 text-zinc-200 rounded text-[11px] font-medium"
+            >
+              Back to all templates
+            </button>
+          </div>
         ) : filteredSnippets.length === 0 ? (
           <div className="h-64 flex flex-col items-center justify-center text-center p-6 bg-[#121317] border border-zinc-800 rounded-md shadow-none">
             <Layers className="w-7 h-7 text-zinc-500 mb-2" />
@@ -432,74 +566,62 @@ export const PublicApp: React.FC = () => {
         ) : (
           /* Responsive Grid: 4 cards per row on desktop, 3 on tablet, 1-2 on mobile */
           <div
-            className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+            className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-w-7xl mx-auto"
             id="card-grid"
           >
             {pageSnippets.map((item) => (
               <div
                 key={item.id}
-                className="bg-[#121317] border border-zinc-800 hover:border-zinc-750 rounded-md transition-colors duration-150 flex flex-col overflow-hidden group h-full shadow-none"
+                className="public-template-card flex flex-col bg-[#1a1a1e] border border-white/10 rounded-[6px] overflow-hidden transition-all duration-200 hover:border-white/20 hover:shadow-xl hover:shadow-black/50"
               >
                 {/* HTML Preview Frame */}
-                <div className="h-56 sm:h-60 bg-[#0b0c0e] border-b border-zinc-800/80 relative overflow-hidden flex items-center justify-center">
+                <div className="relative w-full aspect-[4/3] bg-[#eef2f6] p-2 flex items-center justify-center border-b border-white/5 overflow-hidden">
                   <iframe
                     title={item.title}
                     src={rawTemplateUrl(item.slug)}
                     loading="lazy"
                     sandbox="allow-scripts"
-                    className="absolute left-0 top-0 w-[400%] h-[400%] max-w-none border-0 pointer-events-none scale-[0.25] origin-top-left opacity-95 group-hover:opacity-100 transition-opacity duration-150 shadow-none"
+                    className="absolute left-0 top-0 w-[400%] h-[400%] max-w-none border-0 pointer-events-none scale-[0.25] origin-top-left"
                   />
                   <div className="absolute inset-0 bg-transparent" />
 
-                  {/* Subtle badges */}
-                  <div className="absolute top-2 left-2 flex items-center pointer-events-none">
-                    <span className="text-[10px] font-medium text-zinc-400 bg-[#121317]/90 border border-zinc-800 px-2 py-0.5 rounded shadow-none">
+                  <div className="badge absolute top-2.5 left-2.5 bg-black/60 backdrop-blur-md text-zinc-300 text-[10px] font-medium px-2 py-1 rounded-[4px] tracking-wide pointer-events-none">
                       {item.category}
-                    </span>
                   </div>
 
-                  <div className="absolute top-2 right-2 flex items-center pointer-events-none">
-                    <span className="text-[10px] font-mono text-zinc-400 bg-[#121317]/90 border border-zinc-800 px-2 py-0.5 rounded shadow-none">
+                  <div className="badge absolute top-2.5 right-2.5 bg-black/60 backdrop-blur-md text-zinc-300 text-[10px] font-medium px-2 py-1 rounded-[4px] tracking-wide pointer-events-none">
                       {(item.file_size / 1024).toFixed(1)} KB
-                    </span>
                   </div>
                 </div>
 
-                {/* Compact Info & Buttons Section */}
-                <div className="p-3 flex flex-col justify-between bg-[#121317]">
-                  <div className="flex items-center justify-between gap-1.5 mb-2.5">
+                <div className="p-3.5 flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-2">
                     <h3
-                      className="text-xs font-medium text-zinc-200 truncate tracking-tight"
+                      className="text-[13px] font-medium text-zinc-300 truncate tracking-wide"
                       title={item.title}
                     >
                       {item.title}
                     </h3>
-                    <span className="text-[10px] text-zinc-400 font-mono shrink-0 flex items-center space-x-1">
-                      <Download className="w-2.5 h-2.5 text-zinc-400" />
+                    <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-zinc-500 font-medium">
+                      <Download className="w-3.5 h-3.5" />
                       <span>{item.downloads}</span>
                     </span>
                   </div>
 
-                  <div className="flex items-center space-x-1.5">
+                  <div className="mt-auto flex items-center gap-1.5 pt-1">
                     <button
-                      onClick={() => {
-                        setActiveModal(item);
-                        setViewMode('preview');
-                        setModalHtml(null);
-                        setModalHtmlError(false);
-                        setDeviceSize('desktop');
-                      }}
-                      className="flex-1 py-1.5 px-2 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 hover:text-zinc-100 rounded text-[11px] font-medium transition flex items-center justify-center space-x-1 cursor-pointer shadow-none border-0"
+                      onClick={() => openTemplateModal(item)}
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-[4px] border border-transparent bg-white/[0.04] px-2 py-1.5 text-[11px] font-medium text-zinc-400 transition-all duration-200 hover:border-white/10 hover:bg-white/[0.08] hover:text-zinc-200 cursor-pointer"
                     >
-                      <Eye className="w-3 h-3 text-zinc-400" />
+                      <Eye className="w-3.5 h-3.5" />
                       <span>View</span>
                     </button>
 
                     <button
                       onClick={() => handleDownload(item)}
-                      className="flex-1 py-1.5 px-2 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 hover:text-zinc-100 rounded text-[11px] font-medium transition flex items-center justify-center space-x-1 cursor-pointer shadow-none border-0"
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-[4px] border border-transparent bg-white/[0.04] px-2 py-1.5 text-[11px] font-medium text-zinc-400 transition-all duration-200 hover:border-white/10 hover:bg-white/[0.08] hover:text-zinc-200 cursor-pointer"
                     >
-                      <Download className="w-3 h-3 text-zinc-400" />
+                      <Download className="w-3.5 h-3.5" />
                       <span>Download</span>
                     </button>
 
@@ -511,10 +633,10 @@ export const PublicApp: React.FC = () => {
                           showToast('Failed to load HTML');
                         }
                       }}
-                      className="p-1.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-400 hover:text-zinc-200 rounded transition flex items-center justify-center cursor-pointer shadow-none border-0"
+                      className="flex items-center justify-center rounded-[4px] border border-transparent bg-white/[0.04] p-1.5 text-zinc-400 transition-all duration-200 hover:border-white/10 hover:bg-white/[0.08] hover:text-zinc-200 cursor-pointer"
                       title="Copy HTML"
                     >
-                      <Copy className="w-3 h-3" />
+                      <Copy className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
@@ -684,7 +806,7 @@ export const PublicApp: React.FC = () => {
                 </button>
 
                 <button
-                  onClick={() => setActiveModal(null)}
+                  onClick={closeTemplateModal}
                   className="w-6 h-6 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition cursor-pointer shadow-none border-0"
                 >
                   <X className="w-3.5 h-3.5" />

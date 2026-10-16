@@ -53,6 +53,14 @@ function resolveEnv(key: string, env?: Record<string, any>): string | undefined 
   return undefined;
 }
 
+function decodePathSlug(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+}
+
 function appendAssetRevision(
   assetUrl: string | null | undefined,
   revision: string,
@@ -438,7 +446,8 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
   // GET /api/templates/:slug/raw
   const rawMatch = pathname.match(/^\/api\/templates\/([^/]+)\/raw$/);
   if (rawMatch && method === 'GET') {
-    const slug = rawMatch[1];
+    const slug = decodePathSlug(rawMatch[1]);
+    if (slug === null) return new Response('Invalid template slug', { status: 400 });
     const template = await getTemplateBySlug(tursoClient, slug);
     if (!template) return new Response('Template not found', { status: 404 });
 
@@ -476,7 +485,8 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
   const downloadMatch = pathname.match(/^\/api\/templates\/([^/]+)\/download$/);
   if (downloadMatch && method === 'POST') {
     if (!tursoClient) return json({ success: false, error: 'Database not configured' }, 503);
-    const slug = downloadMatch[1];
+    const slug = decodePathSlug(downloadMatch[1]);
+    if (slug === null) return json({ success: false, error: 'Invalid template slug' }, 400);
     const count = await incrementDownloads(tursoClient, slug);
     return json({ success: true, downloads: count });
   }
@@ -484,7 +494,8 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
   // GET /api/templates/:slug
   const singleMatch = pathname.match(/^\/api\/templates\/([^/]+)$/);
   if (singleMatch && method === 'GET') {
-    const slug = singleMatch[1];
+    const slug = decodePathSlug(singleMatch[1]);
+    if (slug === null) return json({ success: false, error: 'Invalid template slug' }, 400);
     const template = await getTemplateBySlug(tursoClient, slug);
     if (!template) return json({ success: false, error: 'Template not found' }, 404);
 
@@ -890,7 +901,7 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
 
       try {
         const body: any = await req.json();
-        const { id, title, slug, category, tags, html_content } = body;
+        const { id, title, slug, category, tags, description, html_content } = body;
 
         if (!title || !slug || !html_content) {
           return json({ success: false, error: 'Title, slug, and html_content are required.' }, 400);
@@ -905,6 +916,7 @@ export async function handleApiRequest(req: Request, env?: Record<string, any>):
           slug: normalizedSlug,
           category: category?.trim() || 'General',
           tags: Array.isArray(tags) ? tags : [],
+          description: typeof description === 'string' ? description.trim() : undefined,
           html_content,
           r2_key: r2Key,
           r2_url: getR2ObjectUrl(r2Key, r2PublicDomain),

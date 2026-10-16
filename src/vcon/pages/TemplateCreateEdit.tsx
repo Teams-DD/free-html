@@ -20,6 +20,7 @@ interface Props {
     slug: string;
     category: string;
     tags: string[];
+    description: string;
     html_content: string;
   }) => Promise<{ success: boolean; error?: string; r2Uploaded?: boolean }>;
   onBulkUpload?: (
@@ -68,6 +69,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
   const [slug, setSlug] = useState(initialTemplate?.slug || '');
   const [category, setCategory] = useState(initialTemplate?.category || 'General');
   const [tagsInput, setTagsInput] = useState(initialTemplate?.tags.join(', ') || '');
+  const [description, setDescription] = useState(initialTemplate?.description || '');
   const [htmlContent, setHtmlContent] = useState(initialTemplate?.html_content || DEFAULT_HTML);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -195,6 +197,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
         slug: slug.trim().toLowerCase(),
         category,
         tags,
+        description: description.trim(),
         html_content: htmlContent,
       });
 
@@ -459,6 +462,19 @@ export const TemplateCreateEdit: React.FC<Props> = ({
                 value={tagsInput}
                 onChange={(e) => setTagsInput(e.target.value)}
                 className="w-full px-2.5 py-1 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47]"
+              />
+            </div>
+
+            <div className="sm:col-span-4">
+              <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">
+                SEO Description (optional)
+              </label>
+              <textarea
+                rows={2}
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="Short description for this template"
+                className="w-full px-2.5 py-1.5 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47] resize-y"
               />
             </div>
           </div>

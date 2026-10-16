@@ -164,6 +164,7 @@ export async function initTursoSchema(client: Client): Promise<{ success: boolea
         slug TEXT UNIQUE NOT NULL,
         category TEXT NOT NULL DEFAULT 'General',
         tags TEXT DEFAULT '[]',
+        description TEXT NOT NULL DEFAULT '',
         html_content TEXT NOT NULL,
         r2_key TEXT,
         r2_url TEXT,
@@ -174,6 +175,16 @@ export async function initTursoSchema(client: Client): Promise<{ success: boolea
         updated_at TEXT NOT NULL
       );
     `);
+
+    const templateColumns = await client.execute('PRAGMA table_info(templates)');
+    if (!templateColumns.rows.some((row: any) => String(row.name) === 'description')) {
+      try {
+        await client.execute("ALTER TABLE templates ADD COLUMN description TEXT NOT NULL DEFAULT ''");
+      } catch (error) {
+        const columnsAfterRace = await client.execute('PRAGMA table_info(templates)');
+        if (!columnsAfterRace.rows.some((row: any) => String(row.name) === 'description')) throw error;
+      }
+    }
 
     await client.execute(`
       CREATE TABLE IF NOT EXISTS template_sync_jobs (
@@ -689,6 +700,7 @@ export async function getTemplates(
         slug: String(row.slug),
         category: String(row.category || 'General'),
         tags: parseTags(row.tags),
+        description: String(row.description || ''),
         html_content: html,
         r2_key: row.r2_key ? String(row.r2_key) : null,
         r2_url: row.r2_url ? String(row.r2_url) : null,
@@ -743,7 +755,7 @@ export async function getPublicTemplateMetadata(
   }
 
   try {
-    let query = `SELECT id, title, slug, category, tags, r2_key, r2_url, file_size, downloads, views, created_at, updated_at
+    let query = `SELECT id, title, slug, category, tags, description, r2_key, r2_url, file_size, downloads, views, created_at, updated_at
                  FROM templates`;
     const conditions: string[] = [];
     const args: string[] = [];
@@ -784,6 +796,7 @@ export async function getPublicTemplateMetadata(
         slug: String(row.slug),
         category: String(row.category || 'General'),
         tags: parseTags(row.tags),
+        description: String(row.description || ''),
         r2_key: row.r2_key ? String(row.r2_key) : null,
         r2_url: row.r2_url ? String(row.r2_url) : null,
         file_size: Number(row.file_size || 0),
@@ -830,6 +843,7 @@ export async function getTemplateBySlug(client: Client, slug: string): Promise<H
       slug: String(row.slug),
       category: String(row.category || 'General'),
       tags: parseTags(row.tags),
+      description: String(row.description || ''),
       html_content: cleanHtml,
       r2_key: row.r2_key ? String(row.r2_key) : null,
       r2_url: row.r2_url ? String(row.r2_url) : null,
@@ -852,6 +866,7 @@ export async function saveTemplate(
     slug: string;
     category: string;
     tags: string[];
+    description?: string;
     html_content: string;
     r2_key?: string | null;
     r2_url?: string | null;
@@ -864,12 +879,15 @@ export async function saveTemplate(
 
   const existingIdx = mockTemplates.findIndex((t) => t.id === id || t.slug === data.slug);
   const current = existingIdx === -1 ? undefined : mockTemplates[existingIdx];
-  const makeSaved = (targetId: string, existing?: { downloads?: number; views?: number; created_at?: string }): HtmlTemplate => ({
+  const makeSaved = (targetId: string, existing?: { downloads?: number; views?: number; created_at?: string; description?: string }): HtmlTemplate => ({
     id: targetId,
     title: data.title,
     slug: data.slug,
     category: data.category,
     tags: data.tags,
+    description: data.description !== undefined
+      ? data.description.trim()
+      : existing?.description ?? current?.description ?? '',
     html_content: data.html_content,
     r2_key: data.r2_key !== undefined ? data.r2_key : current?.r2_key || null,
     r2_url: data.r2_url !== undefined ? data.r2_url : current?.r2_url || null,
@@ -900,7 +918,7 @@ export async function saveTemplate(
 
     const tagsJson = JSON.stringify(data.tags || []);
     const existing = await client.execute({
-      sql: 'SELECT id, downloads, views, created_at FROM templates WHERE id = ? OR slug = ? LIMIT 1',
+      sql: 'SELECT id, downloads, views, created_at, description FROM templates WHERE id = ? OR slug = ? LIMIT 1',
       args: [id, data.slug],
     });
     const existingRow = existing.rows[0] as any;
@@ -909,14 +927,14 @@ export async function saveTemplate(
     const templateStatement = existingRow
       ? {
           sql: `UPDATE templates
-                SET title = ?, slug = ?, category = ?, tags = ?, html_content = ?, r2_key = ?, r2_url = ?, file_size = ?, updated_at = ?
+                SET title = ?, slug = ?, category = ?, tags = ?, description = ?, html_content = ?, r2_key = ?, r2_url = ?, file_size = ?, updated_at = ?
                 WHERE id = ?`,
-          args: [data.title, data.slug, data.category, tagsJson, data.html_content, saved.r2_key, saved.r2_url, fileSize, now, targetId],
+          args: [data.title, data.slug, data.category, tagsJson, saved.description || '', data.html_content, saved.r2_key, saved.r2_url, fileSize, now, targetId],
         }
       : {
-          sql: `INSERT INTO templates (id, title, slug, category, tags, html_content, r2_key, r2_url, file_size, downloads, views, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`,
-          args: [targetId, data.title, data.slug, data.category, tagsJson, data.html_content, saved.r2_key, saved.r2_url, fileSize, now, now],
+          sql: `INSERT INTO templates (id, title, slug, category, tags, description, html_content, r2_key, r2_url, file_size, downloads, views, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`,
+          args: [targetId, data.title, data.slug, data.category, tagsJson, saved.description || '', data.html_content, saved.r2_key, saved.r2_url, fileSize, now, now],
         };
 
     if (syncObjectKey) {

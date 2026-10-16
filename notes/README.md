@@ -1,26 +1,28 @@
-# Production Update Notes
+# Current Project Update Notes
 
-## Baseline
+## Frozen Baseline
 
 - Audit date: 2026-10-16.
 - Branch: `main`.
-- Baseline commit: `417dc16202a69806bf62bb55819ed3d16c2326b7` (`fix: center full-size preview in view modal`).
-- Worktree was clean and `main` was synced with `origin/main` when the audit started.
-- This is a documented baseline only. No tag, branch protection, production setting, or application code was changed.
-- Findings are source-code verified. Cloudflare Dashboard Cache Rules, live response headers, analytics, and production database/storage state were not available for this audit.
+- Source baseline: `fecafe2` (`Paginate public template cards`).
+- Worktree was clean and synced with `origin/main` at baseline capture.
+- Baseline package version: `0.0.1`; current Phase 2 working-tree version: `0.0.3` in `package.json` and `package-lock.json`.
+- Audit and implementation claims distinguish source state from runtime/deployment verification.
+- Previous roadmap notes are superseded in this working tree; their prior versions remain in Git history.
 
 ## Documents
 
-- [Production readiness audit](production-readiness-audit.md): exact source findings, observed risks, and unknowns.
-- [Implementation roadmap](implementation-roadmap.md): ordered phases with scope locks and completion gates.
-- [Phase progress log](phase-progress-log.md): completed/pending phase status and a per-phase record template.
-- [Error handling](error-handling.md): current source behavior and proposed error controls.
-- [Implementation status](implementation-status.md): source-implemented features, runtime verification limits, and work remaining.
+- [Production readiness audit](production-readiness-audit.md): source findings, implemented Phase 1–2 behavior, and deployment unknowns.
+- [Implementation roadmap](implementation-roadmap.md): frozen baseline plus scoped Phases 0–3.
+- [Phase progress log](phase-progress-log.md): current completion count and implementation records.
+- [Error handling inventory](error-handling.md): current source behavior and Phase 1–2 error requirements.
+- [Implementation status](implementation-status.md): source features, remaining work, and verification limits.
 
 ## Change Control
 
-1. Implement only one roadmap phase at a time and only after explicit approval.
-2. Before each phase, record its allowed files, forbidden areas, acceptance checks, and baseline commit in the log.
-3. Do not change UI, auth, API contracts, or user-visible behavior unless the approved phase explicitly permits it.
-4. Update the audit, roadmap, error-handling document, implementation inventory, and phase log when a phase changes their facts.
-5. Keep all unapproved phases pending. This notes package is not authorization to implement them.
+1. Audit current source before every implementation phase; no inferred runtime claims.
+2. Implement one explicitly approved phase at a time and stay within its scope lock.
+3. Preserve unrelated UI, API, auth, writes, and R2 sync.
+4. Run one focused validation and post-patch scope audit; clearly report any environment blocker.
+5. Update the phase log, implementation status, error inventory, audit, and `MEMORY.md` when facts change.
+6. Keep credentials, full HTML, and secrets out of notes and logs.

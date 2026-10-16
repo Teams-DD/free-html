@@ -4,6 +4,7 @@ export interface HtmlTemplate {
   slug: string;
   category: string;
   tags: string[];
+  description?: string;
   html_content: string;
   r2_key?: string | null;
   r2_url?: string | null;
