@@ -8,6 +8,7 @@ import {
   Files,
   Trash2,
   FileText,
+  X,
 } from 'lucide-react';
 import { HtmlTemplate, Category } from '../../types.ts';
 import { getTemplateSeoMetadata } from '../../lib/seo.ts';
@@ -90,6 +91,7 @@ export const TemplateCreateEdit: React.FC<Props> = ({
   const [seoTitleEdited, setSeoTitleEdited] = useState(Boolean(initialTemplate?.seo_title?.trim()));
   const [seoDescriptionEdited, setSeoDescriptionEdited] = useState(Boolean(initialTemplate?.seo_description?.trim()));
   const [seoKeywordsEdited, setSeoKeywordsEdited] = useState(Boolean(initialTemplate?.seo_keywords?.trim()));
+  const [seoModalOpen, setSeoModalOpen] = useState(false);
   const [htmlContent, setHtmlContent] = useState(initialTemplate?.html_content || DEFAULT_HTML);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -356,6 +358,17 @@ export const TemplateCreateEdit: React.FC<Props> = ({
             />
 
             <button
+              type="button"
+              onClick={() => setSeoModalOpen(true)}
+              className="px-2.5 py-1 bg-[#14151b] hover:bg-[#1a1b22] text-zinc-300 border border-[#22242b] rounded text-[11px] font-medium transition flex items-center space-x-1 cursor-pointer"
+              aria-haspopup="dialog"
+              aria-expanded={seoModalOpen}
+            >
+              <FileText className="w-3 h-3 text-zinc-400" />
+              <span>SEO</span>
+            </button>
+
+            <button
               onClick={handleSubmit}
               disabled={saving}
               className="px-3 py-1 bg-[#22242c] hover:bg-[#2b2d38] text-zinc-200 border border-[#2e313c] rounded text-[11px] font-medium transition flex items-center space-x-1 cursor-pointer disabled:opacity-50"
@@ -394,6 +407,99 @@ export const TemplateCreateEdit: React.FC<Props> = ({
           </div>
         )}
       </div>
+
+      {seoModalOpen && mode === 'single' && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 backdrop-blur-xs"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setSeoModalOpen(false);
+          }}
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSeoModalOpen(false);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="template-seo-dialog-title"
+            className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-md border border-[#2e313c] bg-[#121317] shadow-xl"
+          >
+            <header className="flex items-center justify-between border-b border-[#22242b] bg-[#0f1013] px-4 py-3">
+              <div>
+                <h2 id="template-seo-dialog-title" className="text-xs font-semibold text-zinc-100">Template Description &amp; SEO</h2>
+                <p className="mt-1 text-[10px] text-zinc-500">SEO values save with this template.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSeoModalOpen(false)}
+                aria-label="Close SEO settings"
+                className="flex h-7 w-7 items-center justify-center rounded text-zinc-400 hover:bg-[#1a1b22] hover:text-zinc-100"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </header>
+
+            <div className="space-y-3 overflow-y-auto p-4">
+              <div>
+                <label className="mb-1 block text-[10px] uppercase tracking-wider text-zinc-400">Template Description (optional)</label>
+                <textarea
+                  rows={2}
+                  value={description}
+                  onChange={(event) => handleDescriptionChange(event.target.value)}
+                  placeholder="Short summary; also used to generate an SEO description"
+                  className="w-full resize-y rounded border border-[#22242b] bg-[#090a0c] px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-600 focus:border-[#383b47] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[10px] uppercase tracking-wider text-zinc-400">SEO Title</label>
+                <input
+                  type="text"
+                  required
+                  maxLength={70}
+                  value={seoTitle}
+                  onChange={(event) => handleSeoTitleChange(event.target.value)}
+                  className="w-full rounded border border-[#22242b] bg-[#090a0c] px-2.5 py-1.5 text-xs text-zinc-200 focus:border-[#383b47] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[10px] uppercase tracking-wider text-zinc-400">SEO Description</label>
+                <textarea
+                  required
+                  rows={3}
+                  maxLength={145}
+                  value={seoDescription}
+                  onChange={(event) => handleSeoDescriptionChange(event.target.value)}
+                  className="w-full resize-y rounded border border-[#22242b] bg-[#090a0c] px-2.5 py-1.5 text-xs text-zinc-200 focus:border-[#383b47] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[10px] uppercase tracking-wider text-zinc-400">SEO Keywords (comma-separated)</label>
+                <input
+                  type="text"
+                  required
+                  maxLength={255}
+                  value={seoKeywords}
+                  onChange={(event) => handleSeoKeywordsChange(event.target.value)}
+                  className="w-full rounded border border-[#22242b] bg-[#090a0c] px-2.5 py-1.5 text-xs text-zinc-200 focus:border-[#383b47] focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <footer className="flex justify-end border-t border-[#22242b] px-4 py-3">
+              <button
+                type="button"
+                onClick={() => setSeoModalOpen(false)}
+                className="rounded border border-[#2e313c] bg-[#22242c] px-3 py-1.5 text-[11px] font-medium text-zinc-200 hover:bg-[#2b2d38]"
+              >
+                Done
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
 
       {error && (
         <div className="bg-rose-950/40 border-b border-rose-900/50 px-4 py-2 text-[11px] text-rose-300 flex items-center space-x-1.5">
@@ -551,59 +657,6 @@ export const TemplateCreateEdit: React.FC<Props> = ({
               />
             </div>
 
-            <div className="sm:col-span-4">
-              <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">
-                Template Description (optional)
-              </label>
-              <textarea
-                rows={2}
-                value={description}
-                onChange={(event) => handleDescriptionChange(event.target.value)}
-                placeholder="Short summary; used as the SEO description when no override is set"
-                className="w-full px-2.5 py-1.5 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47] resize-y"
-              />
-            </div>
-
-            <div className="sm:col-span-4 border-t border-[#1c1d22] pt-3 space-y-3">
-              <span className="block text-[10px] font-semibold text-zinc-300 uppercase tracking-wider">SEO Metadata</span>
-              <div>
-                <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">SEO Title</label>
-                <input
-                  type="text"
-                  required
-                  maxLength={70}
-                  value={seoTitle}
-                  onChange={(event) => handleSeoTitleChange(event.target.value)}
-                  placeholder={title ? `${title} HTML Template | Vib Tools` : 'Generated from template title'}
-                  className="w-full px-2.5 py-1 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47]"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">SEO Description</label>
-                <textarea
-                  required
-                  rows={2}
-                  maxLength={145}
-                  value={seoDescription}
-                  onChange={(event) => handleSeoDescriptionChange(event.target.value)}
-                  placeholder="Generated from template title, category, and description"
-                  className="w-full px-2.5 py-1.5 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47] resize-y"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] text-zinc-400 uppercase tracking-wider mb-1">SEO Keywords (comma-separated)</label>
-                <input
-                  type="text"
-                  required
-                  maxLength={255}
-                  value={seoKeywords}
-                  onChange={(event) => handleSeoKeywordsChange(event.target.value)}
-                  placeholder="Generated from title, category, and tags"
-                  className="w-full px-2.5 py-1 bg-[#090a0c] border border-[#22242b] rounded text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#383b47]"
-                />
-              </div>
-              <p className="text-[10px] text-zinc-500">Generated metadata is prefilled. Clear a value to restore its generated default.</p>
-            </div>
           </div>
 
           {/* View Mode Bar */}
