@@ -18,144 +18,11 @@ import {
 import { Category, PublicTemplateMetadata, SiteSettings } from '../types.ts';
 import { getCategorySeoMetadata, getHomeSeoMetadata, getTemplateSeoMetadata } from '../lib/seo.ts';
 import { installSiteScripts } from '../lib/siteScripts.ts';
+import { EditConfirmationDialog, useHtmlEditorEngine } from '../editor/index.ts';
 import { DevLogEntry, DevLogPanel } from './DevLogPanel.tsx';
 
 const rawTemplateUrl = (slug: string, hideScrollbars = false) =>
   `/api/templates/${encodeURIComponent(slug)}/raw${hideScrollbars ? '?hide_scrollbars=1' : ''}`;
-const assignPreviewTextIds = (previewDocument: Document) => {
-  const targets = new Set<Element>();
-  const walker = previewDocument.createTreeWalker(previewDocument.body, NodeFilter.SHOW_TEXT);
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    if (!node.textContent?.trim()) continue;
-    const target = node.parentElement;
-    if (
-      !target ||
-      target.closest('script,style,textarea,input,select,option,svg,canvas,[contenteditable],[aria-hidden="true"]')
-    ) continue;
-    targets.add(target);
-  }
-
-  targets.forEach((target, index) => target.setAttribute('data-vib-editor-id', String(index)));
-};
-type PreviewTextEdit = {
-  shape: string[];
-  textNodes: Array<{ index: number; text: string }>;
-};
-const getPreviewNodeShape = (target: Element) => Array.from(target.childNodes).map((node) => {
-  if (node.nodeType === Node.ELEMENT_NODE) return `element:${(node as Element).tagName}`;
-  if (node.nodeType === Node.TEXT_NODE) return 'text';
-  if (node.nodeType === Node.COMMENT_NODE) return 'comment';
-  return `node:${node.nodeType}`;
-});
-const applyPreviewTextEdits = (html: string, edits: Record<string, PreviewTextEdit>) => {
-  const editedDocument = new DOMParser().parseFromString(html, 'text/html');
-  assignPreviewTextIds(editedDocument);
-  Object.entries(edits).forEach(([id, edit]) => {
-    const target = editedDocument.querySelector(`[data-vib-editor-id="${id}"]`);
-    if (!target) throw new Error('Edited preview target is missing from the original HTML');
-    const originalShape = getPreviewNodeShape(target);
-    if (originalShape.length !== edit.shape.length || originalShape.some((node, index) => node !== edit.shape[index])) {
-      throw new Error('Edited preview target structure changed');
-    }
-    edit.textNodes.forEach(({ index, text }) => {
-      const node = target.childNodes[index];
-      if (node?.nodeType !== Node.TEXT_NODE) throw new Error('Edited preview text node is missing');
-      node.textContent = text;
-    });
-  });
-  editedDocument.querySelectorAll('[data-vib-editor-id]').forEach((target) => {
-    target.removeAttribute('data-vib-editor-id');
-  });
-  const doctype = editedDocument.doctype?.name || 'html';
-  return `<!DOCTYPE ${doctype}>\n${editedDocument.documentElement.outerHTML}`;
-};
-const createModalPreviewDocument = (html: string, slug: string) => {
-  const previewDocument = new DOMParser().parseFromString(html, 'text/html');
-  assignPreviewTextIds(previewDocument);
-  if (!previewDocument.head.querySelector('base[href]')) {
-    const base = previewDocument.createElement('base');
-    base.href = new URL(rawTemplateUrl(slug), window.location.origin).href;
-    base.dataset.vibEditorInjected = 'base';
-    previewDocument.head.prepend(base);
-  }
-
-  const scrollbarStyle = previewDocument.createElement('style');
-  scrollbarStyle.dataset.vibEditorInjected = 'scrollbars';
-  scrollbarStyle.textContent = 'html,body,*{scrollbar-width:none!important;-ms-overflow-style:none!important}html::-webkit-scrollbar,body::-webkit-scrollbar,*::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}';
-  previewDocument.head.append(scrollbarStyle);
-
-  const editorScript = previewDocument.createElement('script');
-  editorScript.dataset.vibEditorInjected = 'bootstrap';
-  editorScript.textContent = `(function () {
-    const blockedSelector = 'script,style,textarea,input,select,option,svg,canvas,[contenteditable]:not([data-vib-editor-target]),[aria-hidden="true"]';
-    const setEditable = (enabled) => {
-      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-      const targets = new Set();
-      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-        if (!node.textContent?.trim()) continue;
-        const target = node.parentElement;
-        if (!target || !target.hasAttribute('data-vib-editor-id') || target.closest(blockedSelector) || target.getClientRects().length === 0) continue;
-        let ancestor = target;
-        let visible = true;
-        while (ancestor) {
-          const style = window.getComputedStyle(ancestor);
-          if (ancestor.hidden || style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0) {
-            visible = false;
-            break;
-          }
-          ancestor = ancestor.parentElement;
-        }
-        if (!visible) continue;
-        targets.add(target);
-      }
-      targets.forEach((target) => {
-        target.dataset.vibEditorTarget = 'true';
-        target.contentEditable = enabled ? 'plaintext-only' : 'false';
-      });
-    };
-
-    const getNodeShape = (target) => Array.from(target.childNodes).map((node) => {
-      if (node.nodeType === Node.ELEMENT_NODE) return 'element:' + node.tagName;
-      if (node.nodeType === Node.TEXT_NODE) return 'text';
-      if (node.nodeType === Node.COMMENT_NODE) return 'comment';
-      return 'node:' + node.nodeType;
-    });
-
-    const editedTexts = new Map();
-    const publishEditedText = (target) => {
-      const id = target.getAttribute('data-vib-editor-id');
-      if (id === null) return;
-      const textNodes = Array.from(target.childNodes)
-        .map((node, index) => node.nodeType === Node.TEXT_NODE ? { index, text: node.textContent || '' } : null)
-        .filter((entry) => entry !== null);
-      editedTexts.set(id, { shape: getNodeShape(target), textNodes });
-      window.parent.postMessage({
-        type: 'public-preview-text-edits',
-        edits: Array.from(editedTexts, ([editedId, edit]) => ({ id: editedId, ...edit })),
-      }, '*');
-    };
-
-    setEditable(true);
-    window.addEventListener('message', (event) => {
-      if (event.source !== parent || event.data?.type !== 'public-preview-editable') return;
-      setEditable(event.data.enabled === true);
-    });
-    document.addEventListener('input', (event) => {
-      if (!(event.target instanceof Element) || event.target.closest('input,textarea,select,option')) return;
-      const target = event.target.closest('[data-vib-editor-target]');
-      if (target) publishEditedText(target);
-    }, true);
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && event.target instanceof Element && event.target.closest('[data-vib-editor-target]')) {
-        event.preventDefault();
-      }
-    }, true);
-  })();`;
-  previewDocument.body.append(editorScript);
-
-  const doctype = previewDocument.doctype?.name || 'html';
-  return `<!DOCTYPE ${doctype}>\n${previewDocument.documentElement.outerHTML}`;
-};
 const templateModalUrl = (slug: string, state: 'opened' | 'closed'): string | null => {
   const pathname = `/${encodeURIComponent(slug)}`;
   const normalizedPathname = new URL(pathname, window.location.origin).pathname;
@@ -268,34 +135,36 @@ export const PublicApp: React.FC = () => {
   const [activeModal, setActiveModal] = useState<PublicTemplateMetadata | null>(null);
   const [modalRouteError, setModalRouteError] = useState(false);
   const [modalPreviewError, setModalPreviewError] = useState(false);
+  const [isEditorRoute, setIsEditorRoute] = useState(false);
   const [categoryRouteError, setCategoryRouteError] = useState(false);
   const [viewMode, setViewMode] = useState<'preview' | 'code'>('preview');
   const [modalHtml, setModalHtml] = useState<string | null>(null);
   const [modalHtmlError, setModalHtmlError] = useState(false);
-  const [modalPreviewHtml, setModalPreviewHtml] = useState<string | null>(null);
-  const [modalTextEdits, setModalTextEdits] = useState<Record<string, PreviewTextEdit>>({});
-  const [modalPreviewRenderHtml, setModalPreviewRenderHtml] = useState<string | null>(null);
   const [modalPreviewLoading, setModalPreviewLoading] = useState(false);
-  const [previewEditable, setPreviewEditable] = useState(true);
   const [deviceSize, setDeviceSize] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const previewViewportRef = useRef<HTMLDivElement>(null);
-  const modalPreviewFrameRef = useRef<HTMLIFrameElement>(null);
   const [previewScale, setPreviewScale] = useState(0.5);
-  const modalPreviewSrcDoc = useMemo(() => {
-    if (!activeModal || modalPreviewRenderHtml === null) return undefined;
-    return createModalPreviewDocument(modalPreviewRenderHtml, activeModal.slug);
-  }, [activeModal?.slug, modalPreviewRenderHtml]);
-  const modalEditedHtmlResult = useMemo(() => {
-    if (modalPreviewHtml === null || Object.keys(modalTextEdits).length === 0) {
-      return { html: null, error: false };
-    }
-    try {
-      return { html: applyPreviewTextEdits(modalPreviewHtml, modalTextEdits), error: false };
-    } catch {
-      return { html: null, error: true };
-    }
-  }, [modalPreviewHtml, modalTextEdits]);
-  const modalEditedHtml = modalEditedHtmlResult.html;
+  const modalPreviewBaseUrl = activeModal
+    ? new URL(rawTemplateUrl(activeModal.slug), window.location.origin).href
+    : null;
+  const {
+    editable: previewEditable,
+    cancelTextSelection,
+    getDownloadSource,
+    initializePreview,
+    isLocalEditActive,
+    pendingTextSelectionId,
+    previewFrameRef: modalPreviewFrameRef,
+    previewSrcDoc: modalPreviewSrcDoc,
+    processing: editorProcessing,
+    reset: resetModalEditor,
+    restoreEditedPreview,
+    startLocalEdit,
+    setEditable: setPreviewEditable,
+    sourceHtml: modalPreviewHtml,
+    storageError,
+    syncEditableState,
+  } = useHtmlEditorEngine(activeModal?.slug ?? null, modalPreviewBaseUrl);
   const templateHtmlCache = useRef(new Map<string, string>());
   const templateHtmlRequests = useRef(new Map<string, Promise<string>>());
   const snippetsRef = useRef(snippets);
@@ -347,6 +216,7 @@ export const PublicApp: React.FC = () => {
     let context: CatalogRouteContext = { view: 'all', page, pageSize: size };
     let templateSlug: string | null = null;
     let legacyTemplateRoute = false;
+    let editorRoute = false;
     let invalidTemplateRoute = false;
     let invalidCategoryRoute = false;
 
@@ -387,6 +257,17 @@ export const PublicApp: React.FC = () => {
           invalidTemplateRoute = true;
         }
       }
+    } else if (
+      segments.length === 2 &&
+      segments[1] === 'edit' &&
+      !['vcon', 'api', 'categories', 'templates', 'popular'].includes(segments[0])
+    ) {
+      try {
+        templateSlug = decodeURIComponent(segments[0]);
+        editorRoute = true;
+      } catch {
+        invalidTemplateRoute = true;
+      }
     } else if (opened) {
       if (segments.length !== 1) invalidTemplateRoute = true;
       else {
@@ -403,6 +284,7 @@ export const PublicApp: React.FC = () => {
 
     if (invalidTemplateRoute || invalidCategoryRoute) {
       setActiveModal(null);
+      setIsEditorRoute(false);
       setModalRouteError(invalidTemplateRoute);
       setCategoryRouteError(invalidCategoryRoute);
       return;
@@ -410,6 +292,7 @@ export const PublicApp: React.FC = () => {
 
     setCategoryRouteError(false);
     setModalRouteError(false);
+    setIsEditorRoute(editorRoute);
     setSelectedCategory(context.view === 'popular'
       ? '__popular__'
       : context.view === 'category'
@@ -421,12 +304,14 @@ export const PublicApp: React.FC = () => {
     if (!templateSlug) {
       modalContextRef.current = null;
       setActiveModal(null);
+      setIsEditorRoute(false);
       return;
     }
 
     const template = snippetsRef.current.find((item) => item.slug === templateSlug);
     if (!template) {
       setActiveModal(null);
+      setIsEditorRoute(false);
       setModalRouteError(true);
       return;
     }
@@ -439,14 +324,11 @@ export const PublicApp: React.FC = () => {
       setViewMode('preview');
       setModalHtml(null);
       setModalHtmlError(false);
-      setModalPreviewHtml(null);
-      setModalTextEdits({});
-      setModalPreviewRenderHtml(null);
+      resetModalEditor();
       setModalPreviewLoading(true);
-      setPreviewEditable(true);
       setDeviceSize('desktop');
     }
-  }, [categoriesLoading, publicCategories, trackActivity]);
+  }, [categoriesLoading, publicCategories, resetModalEditor, trackActivity]);
 
   const openTemplateModal = (item: PublicTemplateMetadata) => {
     const context = catalogContext(selectedCategory, currentPage, pageSize);
@@ -465,13 +347,11 @@ export const PublicApp: React.FC = () => {
     setModalRouteError(false);
     setCategoryRouteError(false);
     setViewMode('preview');
+    setIsEditorRoute(false);
     setModalHtml(null);
     setModalHtmlError(false);
-    setModalPreviewHtml(null);
-    setModalTextEdits({});
-    setModalPreviewRenderHtml(null);
+    resetModalEditor();
     setModalPreviewLoading(true);
-    setPreviewEditable(true);
     setDeviceSize('desktop');
   };
 
@@ -499,14 +379,12 @@ export const PublicApp: React.FC = () => {
     }
     modalContextRef.current = null;
     setActiveModal(null);
+    setIsEditorRoute(false);
     setModalRouteError(false);
     setCategoryRouteError(false);
-    setModalPreviewHtml(null);
-    setModalTextEdits({});
-    setModalPreviewRenderHtml(null);
+    resetModalEditor();
     setModalPreviewLoading(false);
-    setPreviewEditable(true);
-  }, [activeModal, publicCategories, trackActivity]);
+  }, [activeModal, publicCategories, resetModalEditor, trackActivity]);
 
   useEffect(() => {
     const handlePopState = () => syncRouteFromLocation();
@@ -553,15 +431,10 @@ export const PublicApp: React.FC = () => {
 
     let canceled = false;
     setModalPreviewLoading(true);
-    getTemplateHtml(activeModal.slug)
-      .then((html) => {
-        if (!canceled) {
-          setModalPreviewHtml(html);
-          setModalPreviewRenderHtml(html);
-        }
-      })
-      .catch(() => {
-        if (!canceled) {
+    initializePreview(activeModal.slug, () => getTemplateHtml(activeModal.slug), isEditorRoute)
+      .then((result) => {
+        if (canceled) return;
+        if (result.kind === 'error') {
           setModalPreviewError(true);
           setModalPreviewLoading(false);
         }
@@ -570,47 +443,7 @@ export const PublicApp: React.FC = () => {
     return () => {
       canceled = true;
     };
-  }, [activeModal, getTemplateHtml, modalPreviewError, modalPreviewHtml, viewMode]);
-
-  useEffect(() => {
-    if (viewMode !== 'preview' || modalPreviewHtml === null) return;
-    modalPreviewFrameRef.current?.contentWindow?.postMessage({
-      type: 'public-preview-editable',
-      enabled: previewEditable,
-    }, '*');
-  }, [modalPreviewHtml, previewEditable, viewMode]);
-
-  useEffect(() => {
-    if (!activeModal) return;
-
-    const handlePreviewHtmlMessage = (event: MessageEvent) => {
-      if (event.source !== modalPreviewFrameRef.current?.contentWindow) return;
-      const message = event.data as { type?: unknown; edits?: unknown } | null;
-      if (message?.type !== 'public-preview-text-edits' || !Array.isArray(message.edits)) return;
-      const edits = message.edits.filter((item): item is { id: string; shape: string[]; textNodes: Array<{ index: number; text: string }> } => {
-        if (!item || typeof item !== 'object') return false;
-        const edit = item as { id?: unknown; shape?: unknown; textNodes?: unknown };
-        if (typeof edit.id !== 'string' || !/^\d+$/.test(edit.id) || !Array.isArray(edit.shape) || !Array.isArray(edit.textNodes)) return false;
-        if (!edit.shape.every((entry) => typeof entry === 'string')) return false;
-        return edit.textNodes.every((node) => {
-          if (!node || typeof node !== 'object') return false;
-          const textNode = node as { index?: unknown; text?: unknown };
-          return Number.isInteger(textNode.index) && Number(textNode.index) >= 0 && typeof textNode.text === 'string';
-        });
-      });
-      if (edits.length === 0) return;
-      setModalTextEdits((current) => {
-        const updated = { ...current };
-        edits.forEach(({ id, textNodes }) => {
-          updated[id] = textNodes;
-        });
-        return updated;
-      });
-    };
-
-    window.addEventListener('message', handlePreviewHtmlMessage);
-    return () => window.removeEventListener('message', handlePreviewHtmlMessage);
-  }, [activeModal?.slug]);
+  }, [activeModal, getTemplateHtml, initializePreview, isEditorRoute, modalPreviewError, modalPreviewHtml, viewMode]);
 
   useEffect(() => {
     if (!activeModal || viewMode !== 'preview' || deviceSize !== 'desktop') return;
@@ -638,6 +471,19 @@ export const PublicApp: React.FC = () => {
   const showToast = (text: string) => {
     setToastText(text);
     setTimeout(() => setToastText(null), 2500);
+  };
+
+  const confirmPreviewTextEdit = async () => {
+    if (!activeModal) return;
+    const started = await startLocalEdit(activeModal.slug, () => getTemplateHtml(activeModal.slug));
+    if (!started) return;
+
+    const editPath = `/${encodeURIComponent(activeModal.slug)}/edit`;
+    window.history.pushState({ templateSlug: activeModal.slug, editorMode: 'local' }, '', editPath);
+    lastResolvedLocationRef.current = `${window.location.pathname}${window.location.search}`;
+    setIsEditorRoute(true);
+    setModalHtml(null);
+    setModalHtmlError(false);
   };
 
   // Load site settings and apply dynamic SEO metadata & favicon
@@ -738,7 +584,16 @@ export const PublicApp: React.FC = () => {
   }, [recordApiFailure, recordApiResponse]);
 
   useEffect(() => {
-    if (!activeModal || viewMode !== 'code' || modalHtml !== null) return;
+    if (!activeModal || viewMode !== 'code') return;
+
+    if (isEditorRoute || isLocalEditActive) {
+      const localSource = getDownloadSource();
+      if (localSource.kind === 'edited') setModalHtml(localSource.html);
+      else setModalHtmlError(true);
+      return;
+    }
+
+    if (modalHtml !== null) return;
 
     let canceled = false;
     setModalHtmlError(false);
@@ -753,7 +608,7 @@ export const PublicApp: React.FC = () => {
     return () => {
       canceled = true;
     };
-  }, [activeModal, getTemplateHtml, modalHtml, viewMode]);
+  }, [activeModal, getDownloadSource, getTemplateHtml, isEditorRoute, isLocalEditActive, modalHtml, viewMode]);
 
   useEffect(() => {
     loadTemplates();
@@ -1388,7 +1243,7 @@ export const PublicApp: React.FC = () => {
                   <button
                     onClick={() => {
                       if (viewMode !== 'preview') {
-                        setModalPreviewRenderHtml(modalEditedHtml ?? modalPreviewHtml);
+                        restoreEditedPreview();
                       }
                       setViewMode('preview');
                     }}
@@ -1434,7 +1289,16 @@ export const PublicApp: React.FC = () => {
                   <button
                     onClick={async () => {
                       try {
-                        handleCopyCode(modalHtml ?? await getTemplateHtml(activeModal.slug));
+                        if (isEditorRoute || isLocalEditActive) {
+                          const localSource = getDownloadSource();
+                          if (localSource.kind !== 'edited') {
+                            showToast(storageError || 'Saved local HTML is unavailable.');
+                            return;
+                          }
+                          handleCopyCode(localSource.html);
+                        } else {
+                          handleCopyCode(modalHtml ?? await getTemplateHtml(activeModal.slug));
+                        }
                       } catch {
                         showToast('Failed to load HTML');
                       }
@@ -1457,14 +1321,15 @@ export const PublicApp: React.FC = () => {
 
                 <button
                   onClick={() => {
+                    const downloadSource = getDownloadSource();
                     if (
-                      Object.keys(modalTextEdits).length > 0 &&
-                      (modalEditedHtmlResult.error || typeof modalEditedHtml !== 'string')
+                      downloadSource.kind === 'error' ||
+                      ((isEditorRoute || isLocalEditActive) && downloadSource.kind !== 'edited')
                     ) {
-                      showToast('Preview edits could not be prepared. Please review your changes.');
+                      showToast(storageError || 'Preview edits could not be prepared. Please review your changes.');
                       return;
                     }
-                    void handleDownload(activeModal, modalEditedHtml);
+                    void handleDownload(activeModal, downloadSource.kind === 'edited' ? downloadSource.html : null);
                   }}
                   className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 hover:text-zinc-100 rounded text-[11px] font-medium transition flex items-center space-x-1 cursor-pointer shadow-none border-0"
                 >
@@ -1483,6 +1348,11 @@ export const PublicApp: React.FC = () => {
 
             {/* Modal Body */}
             <div ref={previewViewportRef} className="flex-1 bg-[#0b0c0e] relative overflow-hidden flex items-center justify-center p-2">
+              {storageError && isLocalEditActive && !modalPreviewError && (
+                <div role="alert" className="absolute left-3 right-3 top-3 z-20 border border-rose-900/70 bg-[#241417] px-3 py-2 text-xs text-rose-200">
+                  {storageError}
+                </div>
+              )}
               {viewMode === 'preview' ? (
                 <div
                   className={`bg-[#0b0c0e] transition-all duration-200 overflow-hidden border border-zinc-800 rounded shadow-none ${
@@ -1501,10 +1371,7 @@ export const PublicApp: React.FC = () => {
                       onLoad={() => {
                         setModalPreviewError(false);
                         setModalPreviewLoading(false);
-                        modalPreviewFrameRef.current?.contentWindow?.postMessage({
-                          type: 'public-preview-editable',
-                          enabled: previewEditable,
-                        }, '*');
+                        syncEditableState();
                       }}
                       onError={() => {
                         setModalPreviewError(true);
@@ -1523,18 +1390,25 @@ export const PublicApp: React.FC = () => {
                   )}
                   {modalPreviewError && (
                     <div role="status" aria-live="polite" className="absolute inset-0 flex items-center justify-center bg-[#0b0c0e] text-xs text-zinc-400">
-                      Preview unavailable
+                      {storageError || 'Preview unavailable'}
                     </div>
                   )}
                 </div>
               ) : (
                 <div className="w-full h-full bg-[#0b0c0e] p-3.5 overflow-auto shadow-none">
                   <pre className="text-zinc-300 font-mono text-[11px] leading-relaxed selection:bg-zinc-800">
-                    {modalHtmlError ? 'Unable to load HTML. Switch to Preview and try again.' : modalHtml ?? 'Loading HTML...'}
+                    {modalHtmlError ? storageError || 'Unable to load HTML. Switch to Preview and try again.' : modalHtml ?? 'Loading HTML...'}
                   </pre>
                 </div>
               )}
             </div>
+            <EditConfirmationDialog
+              open={pendingTextSelectionId !== null}
+              processing={editorProcessing}
+              error={storageError}
+              onConfirm={() => void confirmPreviewTextEdit()}
+              onCancel={cancelTextSelection}
+            />
           </div>
         </div>
       )}
